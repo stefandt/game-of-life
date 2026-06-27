@@ -1,10 +1,12 @@
 #include "raylib.h"
-#include "raymath.h"
 #include "hexsphere.h"
+#include "raymath.h"
+
+enum class CameraMode { MouseOrbit, Orbital };
 
 int main()
 {
-    InitWindow(1024, 768, "Hex Sphere");
+    InitWindow(1600, 1200, "Hex Sphere");
     SetTargetFPS(60);
 
     const HexSphere sphere = HexSphere::create(3, 3.0f);
@@ -13,40 +15,48 @@ int main()
     for (const auto& f : sphere.faces)
         if (!f.pentagon) ++hex_count;
 
-    Camera3D cam  = {};
-    cam.target    = {0.0f, 0.0f, 0.0f};
-    cam.up        = {0.0f, 1.0f, 0.0f};
-    cam.fovy      = 45.0f;
+    Camera3D cam   = {};
+    cam.target     = {0.0f, 0.0f, 0.0f};
+    cam.up         = {0.0f, 1.0f, 0.0f};
+    cam.fovy       = 45.0f;
     cam.projection = CAMERA_PERSPECTIVE;
 
-    float yaw      = 0.0f;    // горизонтальный угол, градусы
-    float pitch    = 20.0f;   // вертикальный угол, градусы
-    float distance = 9.0f;    // расстояние от центра
+    CameraMode mode = CameraMode::MouseOrbit;
+
+    float yaw      = 0.0f;
+    float pitch    = 20.0f;
+    float distance = 9.0f;
 
     while (!WindowShouldClose()) {
-        // Левая кнопка мыши — вращение
-        if (IsMouseButtonDown(MOUSE_BUTTON_LEFT)) {
-            Vector2 delta = GetMouseDelta();
-            yaw   -= delta.x * 0.3f;
-            pitch -= delta.y * 0.3f;
-            pitch  = Clamp(pitch, -89.0f, 89.0f);
+        // Tab — переключение режима
+        if (IsKeyPressed(KEY_TAB)) {
+            mode = (mode == CameraMode::MouseOrbit)
+                 ? CameraMode::Orbital
+                 : CameraMode::MouseOrbit;
         }
 
-        // Колёсико — зум
-        float wheel = GetMouseWheelMove();
-        if (wheel != 0.0f) {
-            distance -= wheel * 0.5f;
-            distance  = Clamp(distance, 4.0f, 20.0f);
+        if (mode == CameraMode::MouseOrbit) {
+            if (IsMouseButtonDown(MOUSE_BUTTON_LEFT)) {
+                Vector2 delta = GetMouseDelta();
+                yaw   -= delta.x * 0.3f;
+                pitch -= delta.y * 0.3f;
+                pitch  = Clamp(pitch, -89.0f, 89.0f);
+            }
+            float wheel = GetMouseWheelMove();
+            if (wheel != 0.0f) {
+                distance -= wheel * 0.5f;
+                distance  = Clamp(distance, 4.0f, 20.0f);
+            }
+            float yr = yaw   * DEG2RAD;
+            float pr = pitch * DEG2RAD;
+            cam.position = {
+                distance * cosf(pr) * sinf(yr),
+                distance * sinf(pr),
+                distance * cosf(pr) * cosf(yr)
+            };
+        } else {
+            UpdateCamera(&cam, CAMERA_ORBITAL);
         }
-
-        // Позиция камеры из сферических координат
-        float yr = yaw   * DEG2RAD;
-        float pr = pitch * DEG2RAD;
-        cam.position = {
-            distance * cosf(pr) * sinf(yr),
-            distance * sinf(pr),
-            distance * cosf(pr) * cosf(yr)
-        };
 
         BeginDrawing();
         ClearBackground(BLACK);
@@ -65,9 +75,15 @@ int main()
         }
         EndMode3D();
 
+        const char* mode_str = (mode == CameraMode::MouseOrbit)
+            ? "Mouse Orbit  (Tab to switch)"
+            : "Auto Orbital  (Tab to switch)";
+
         DrawText(TextFormat("%d hexagons  12 pentagons", hex_count), 10, 10, 20, WHITE);
-        DrawText("LMB drag: rotate   wheel: zoom", 10, 40, 18, GRAY);
-        DrawFPS(10, 70);
+        DrawText(mode_str, 10, 40, 18, GRAY);
+        if (mode == CameraMode::MouseOrbit)
+            DrawText("LMB drag: rotate   wheel: zoom", 10, 62, 18, GRAY);
+        DrawFPS(10, 90);
         EndDrawing();
     }
 
