@@ -68,7 +68,7 @@ std::vector<int> sort_around_vertex(
 
 HexSphere HexSphere::create(int subdivisions, float radius)
 {
-    par_shapes_mesh* geo = par_shapes_create_subdivided_icosahedra(subdivisions);
+    par_shapes_mesh* geo = par_shapes_create_subdivided_sphere(subdivisions);
 
     // vertex → adjacent triangle indices
     std::vector<std::vector<int>> v2t(geo->npoints);
