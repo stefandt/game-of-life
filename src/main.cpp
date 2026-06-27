@@ -1,4 +1,5 @@
 #include "raylib.h"
+#include "raymath.h"
 #include "hexsphere.h"
 
 int main()
@@ -13,14 +14,39 @@ int main()
         if (!f.pentagon) ++hex_count;
 
     Camera3D cam  = {};
-    cam.position  = {0.0f, 0.0f, 9.0f};
     cam.target    = {0.0f, 0.0f, 0.0f};
     cam.up        = {0.0f, 1.0f, 0.0f};
     cam.fovy      = 45.0f;
     cam.projection = CAMERA_PERSPECTIVE;
 
+    float yaw      = 0.0f;    // горизонтальный угол, градусы
+    float pitch    = 20.0f;   // вертикальный угол, градусы
+    float distance = 9.0f;    // расстояние от центра
+
     while (!WindowShouldClose()) {
-        UpdateCamera(&cam, CAMERA_ORBITAL);
+        // Левая кнопка мыши — вращение
+        if (IsMouseButtonDown(MOUSE_BUTTON_LEFT)) {
+            Vector2 delta = GetMouseDelta();
+            yaw   -= delta.x * 0.3f;
+            pitch -= delta.y * 0.3f;
+            pitch  = Clamp(pitch, -89.0f, 89.0f);
+        }
+
+        // Колёсико — зум
+        float wheel = GetMouseWheelMove();
+        if (wheel != 0.0f) {
+            distance -= wheel * 0.5f;
+            distance  = Clamp(distance, 4.0f, 20.0f);
+        }
+
+        // Позиция камеры из сферических координат
+        float yr = yaw   * DEG2RAD;
+        float pr = pitch * DEG2RAD;
+        cam.position = {
+            distance * cosf(pr) * sinf(yr),
+            distance * sinf(pr),
+            distance * cosf(pr) * cosf(yr)
+        };
 
         BeginDrawing();
         ClearBackground(BLACK);
@@ -40,7 +66,8 @@ int main()
         EndMode3D();
 
         DrawText(TextFormat("%d hexagons  12 pentagons", hex_count), 10, 10, 20, WHITE);
-        DrawFPS(10, 40);
+        DrawText("LMB drag: rotate   wheel: zoom", 10, 40, 18, GRAY);
+        DrawFPS(10, 70);
         EndDrawing();
     }
 
