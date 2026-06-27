@@ -92,7 +92,14 @@ HexSphere HexSphere::create(int subdivisions, float radius)
         primal.set_point(vh, p.normalized() * radius);
     }
 
-    // 4. Build dual mesh (Goldberg polyhedron)
+    // 4. Build dual mesh (Goldberg polyhedron).
+    //    Pentagon flag: original icosahedron vertices have valence 5 after
+    //    subdivision; all other vertices have valence 6.
+    //    Detect this from the primal before building the dual.
+    std::vector<bool> is_pentagon(primal.n_vertices(), false);
+    for (auto vh : primal.vertices())
+        is_pentagon[vh.idx()] = (primal.valence(vh) == 5);
+
     const PolyMesh dual = build_dual(primal, radius);
 
     // 5. Extract into HexSphere
@@ -104,14 +111,19 @@ HexSphere HexSphere::create(int subdivisions, float radius)
         result.verts[vh.idx()] = {p[0], p[1], p[2]};
     }
 
+    // Dual face index == primal vertex index (same iteration order)
     result.faces.resize(dual.n_faces());
-    for (auto fh : dual.faces()) {
-        auto& face = result.faces[fh.idx()];
-        for (auto vh : dual.fv_range(fh))
-            face.verts.push_back(vh.idx());
-        face.pentagon = (face.verts.size() == 5);
-        for (auto ffh : dual.ff_range(fh))
+    int face_idx = 0;
+    for (auto vh : primal.vertices()) {
+        if (primal.vf_range(vh).begin() == primal.vf_range(vh).end()) continue;
+        auto& face    = result.faces[face_idx];
+        auto  dfh     = PolyMesh::FaceHandle(face_idx);
+        face.pentagon = is_pentagon[vh.idx()];
+        for (auto dvh : dual.fv_range(dfh))
+            face.verts.push_back(dvh.idx());
+        for (auto ffh : dual.ff_range(dfh))
             face.neighbors.push_back(ffh.idx());
+        ++face_idx;
     }
 
     return result;

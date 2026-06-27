@@ -17,12 +17,16 @@ int main()
 
     Font font = GetFontDefault();
     SetTextureFilter(font.texture, TEXTURE_FILTER_POINT);
+    
+    // subdivisions: 1 → 42 faces, 2 → 162, 3 → 642, 4 → 2562
+    const HexSphere sphere = HexSphere::create(4, 3.0f);
 
-    const HexSphere sphere = HexSphere::create(3, 3.0f);
-
-    int hex_count = 0;
-    for (const auto& f : sphere.faces)
-        if (!f.pentagon) ++hex_count;
+    int hex_count  = 0;
+    int pent_count = 0;
+    for (const auto& f : sphere.faces) {
+        if (f.pentagon) ++pent_count;
+        else            ++hex_count;
+    }
 
     Camera3D cam   = {};
     cam.position   = {0.0f, 0.0f, 9.0f};
@@ -76,16 +80,21 @@ int main()
         ClearBackground(BLACK);
 
         BeginMode3D(cam);
+        // Pass 1: hexagons
         for (const auto& face : sphere.faces) {
-            Color color = face.pentagon ? ORANGE : RAYWHITE;
+            if (face.pentagon) continue;
             int n = (int)face.verts.size();
-            for (int i = 0; i < n; ++i) {
-                DrawLine3D(
-                    sphere.verts[face.verts[i]],
-                    sphere.verts[face.verts[(i + 1) % n]],
-                    color
-                );
-            }
+            for (int i = 0; i < n; ++i)
+                DrawLine3D(sphere.verts[face.verts[i]],
+                           sphere.verts[face.verts[(i + 1) % n]], RAYWHITE);
+        }
+        // Pass 2: pentagons on top so shared edges stay orange
+        for (const auto& face : sphere.faces) {
+            if (!face.pentagon) continue;
+            int n = (int)face.verts.size();
+            for (int i = 0; i < n; ++i)
+                DrawLine3D(sphere.verts[face.verts[i]],
+                           sphere.verts[face.verts[(i + 1) % n]], ORANGE);
         }
         EndMode3D();
 
@@ -93,7 +102,7 @@ int main()
         DrawRectangle(0, 0, 420, 120, Fade(BLACK, 0.6f));
 
         hud(font, "Goldberg Polyhedron",                               12, 10, 22, WHITE);
-        hud(font, TextFormat("%d hexagons   12 pentagons", hex_count), 12, 36, 20, LIGHTGRAY);
+        hud(font, TextFormat("%d hexagons   %d pentagons", hex_count, pent_count), 12, 36, 20, LIGHTGRAY);
 
         DrawLineEx({12, 61}, {408, 61}, 1, Fade(WHITE, 0.15f));
 
