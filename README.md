@@ -1,25 +1,19 @@
 # Live C++ Project
 
-This is a minimal C++20 project configured for VS Code, CMake, Clang/LLVM, and Ninja on Windows.
+Minimal C++20 project configured for VS Code, CMake, Clang/LLVM, and Ninja on Windows.
 
 ## Required Tools
 
-The project needs the following tools installed.
-
 ### Visual Studio Code
 
-VS Code is used as the IDE/editor.
-
-Recommended extensions:
+IDE and editor. Required extensions:
 
 - C/C++ (`ms-vscode.cpptools`)
 - CMake Tools (`ms-vscode.cmake-tools`)
 
 ### CMake
 
-CMake generates the native build files from `CMakeLists.txt`.
-
-Check installation:
+Generates native build files from `CMakeLists.txt`.
 
 ```powershell
 cmake --version
@@ -27,73 +21,92 @@ cmake --version
 
 ### LLVM / Clang
 
-Clang is the C++ compiler used by this project.
-
-Installed with:
+C++ compiler.
 
 ```powershell
 winget install LLVM
-```
-
-Check installation:
-
-```powershell
 clang++ --version
-clang --version
 ```
 
 ### Ninja
 
-Ninja is the build system generator used by the CMake presets.
-
-Installed with:
+Build system used by the CMake presets.
 
 ```powershell
 winget install Ninja-build.Ninja
-```
-
-Check installation:
-
-```powershell
 ninja --version
 ```
 
-### Visual Studio Build Tools C++ Components
+### Visual Studio Build Tools — C++ Components
 
-On Windows, Clang still needs MSVC runtime libraries and Windows SDK libraries for linking.
-
-Required Visual Studio Build Tools components:
+Clang on Windows uses the MSVC runtime and Windows SDK for linking. The following components are required:
 
 - `Microsoft.VisualStudio.Component.VC.Tools.x86.x64`
 - `Microsoft.VisualStudio.Component.Windows10SDK.22621`
 
-These provide files such as:
+These provide `cl.exe`, `oldnames.lib`, `msvcrtd.lib`, and the Windows SDK headers and libraries.
 
-- `cl.exe`
-- `oldnames.lib`
-- `msvcrtd.lib`
-- Windows SDK headers and libraries
+---
 
-The project tasks call:
+## How Library and Include Paths Are Resolved
 
-```text
-C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\Common7\Tools\VsDevCmd.bat
+Clang on Windows does not ship its own standard library. It uses the MSVC STL and Windows SDK headers from the Visual Studio Build Tools installation. These paths must be available at compile time and link time.
+
+There are two contexts where paths must be resolved, and each uses a different mechanism.
+
+### Terminal builds
+
+Command-line builds call `tools/cmake_with_vsdev.cmd`, which activates the Visual Studio developer environment before invoking CMake:
+
+```cmd
+call "C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\Common7\Tools\VsDevCmd.bat" -arch=x64 -host_arch=x64
+cmake %*
 ```
 
-This prepares the terminal environment so Clang can find the MSVC and Windows SDK libraries.
+`VsDevCmd.bat` sets the `INCLUDE`, `LIB`, and `LIBPATH` environment variables for the current process. Clang reads `INCLUDE` to find headers and `LIB` to find libraries. Without this step, Clang fails with errors such as:
 
-## Build And Run
+```
+lld-link: error: could not open 'oldnames.lib': no such file or directory
+lld-link: error: could not open 'msvcrtd.lib': no such file or directory
+```
+
+### VS Code IntelliSense and CMake Tools builds
+
+VS Code does not activate `VsDevCmd.bat`. The CMake Tools extension uses the active **cmake kit** to configure the project. The kit defined in `.vscode/cmake-kits.json` explicitly sets the same `INCLUDE`, `LIB`, and `LIBPATH` variables that `VsDevCmd.bat` would set.
+
+This ensures that:
+
+- CMake Tools configures the project with the correct environment
+- The generated `compile_commands.json` reflects the actual include paths
+- IntelliSense resolves standard library headers from the same paths used during build
+
+**Selecting the kit in VS Code:**
+
+`Ctrl+Shift+P` → `CMake: Select a Kit` → `Clang + VS 2022 BuildTools x64`
+
+**When to update `cmake-kits.json`:**
+
+The kit file contains hardcoded paths including the MSVC toolset version (e.g. `14.44.35207`). When Visual Studio Build Tools is updated to a new toolset version, these paths must be regenerated. Run the following in PowerShell to capture the current values:
+
+```powershell
+$vsdev = "C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\Common7\Tools\VsDevCmd.bat"
+$output = cmd /c "`"$vsdev`" -arch=x64 -host_arch=x64 >nul 2>&1 && set"
+$output | Select-String '^(INCLUDE|LIB|LIBPATH)='
+```
+
+Then update `INCLUDE`, `LIB`, and `LIBPATH` in `.vscode/cmake-kits.json`.
+
+---
+
+## Build and Run
+
+### From the terminal
 
 Debug build:
 
 ```powershell
 .\tools\cmake_with_vsdev.cmd --preset clang-debug
 .\tools\cmake_with_vsdev.cmd --build --preset clang-debug
-```
-
-Run debug executable:
-
-```powershell
 .\build\clang-debug\live_d.exe
 ```
 
@@ -102,371 +115,118 @@ Release build:
 ```powershell
 .\tools\cmake_with_vsdev.cmd --preset clang-release
 .\tools\cmake_with_vsdev.cmd --build --preset clang-release
-```
-
-Run release executable:
-
-```powershell
 .\build\clang-release\live.exe
 ```
 
+### From VS Code
+
+| Action | How |
+|---|---|
+| Build debug (default) | `Ctrl+Shift+B` |
+| Build release | `Ctrl+Shift+P` → `Tasks: Run Task` → `CMake: build clang-release` |
+| Run debug app | `Ctrl+Shift+P` → `Tasks: Run Task` → `Run debug app` |
+| Run release app | `Ctrl+Shift+P` → `Tasks: Run Task` → `Run release app` |
+| Debug (F5) | `F5` — builds debug automatically, then launches debugger |
+
+---
+
 ## Output Files
 
-Debug output:
-
-```text
-build/clang-debug/live_d.exe
+```
+build/clang-debug/live_d.exe    — debug build
+build/clang-release/live.exe    — release build
 ```
 
-Release output:
+Output names are configured in `CMakeLists.txt` using `OUTPUT_NAME` and `DEBUG_POSTFIX`.
 
-```text
-build/clang-release/live.exe
-```
-
-The output names are configured in `CMakeLists.txt`.
+---
 
 ## Project Files
 
-### `README.md`
-
-This file. It explains the required tools, project structure, build commands, and the purpose of the configuration files.
-
-### `SETUP_HISTORY.md`
-
-Chronological setup log.
-
-It records what was installed, what commands were used, what failed, and what fixed the environment.
-
 ### `CMakeLists.txt`
 
-Main CMake project file.
-
-CMake reads this file to understand:
-
-- the project name
-- the C++ standard
-- which source files belong to the executable
-- compiler warning options
-- final executable names
-
-Important parts:
+Main CMake project file. Defines the executable target, sets C++20, enables warnings, and configures output names.
 
 ```cmake
-project(ClangCMakeApp VERSION 0.1.0 LANGUAGES CXX)
-```
-
-Defines the project as a C++ project.
-
-```cmake
-add_executable(clang_cmake_app
-    src/main.cpp
-)
-```
-
-Creates one executable target from `src/main.cpp`.
-
-```cmake
+add_executable(clang_cmake_app src/main.cpp)
 target_compile_features(clang_cmake_app PRIVATE cxx_std_20)
+target_compile_options(clang_cmake_app PRIVATE -Wall -Wextra -Wpedantic)
+set_target_properties(clang_cmake_app PROPERTIES OUTPUT_NAME "live" DEBUG_POSTFIX "_d")
 ```
 
-Requires C++20 for this target.
-
-```cmake
-set_target_properties(clang_cmake_app PROPERTIES
-    OUTPUT_NAME "live"
-    OUTPUT_NAME_DEBUG "live_d"
-)
-```
-
-Sets the generated executable names:
-
-- Debug: `live_d.exe`
-- Release: `live.exe`
-
-Used by:
-
-- CMake
-- Ninja
-- VS Code CMake Tools extension
-
-Not used directly by:
-
-- Clang
-
-Clang receives compile/link commands generated by CMake from this file.
+`DEBUG_POSTFIX "_d"` appends `_d` to the executable name in Debug configuration, producing `live_d.exe`.
 
 ### `CMakePresets.json`
 
-CMake presets file.
+Named configure and build configurations. A hidden `base` preset holds shared settings (Ninja generator, clang++ compiler, `compile_commands.json` export). The `clang-debug` and `clang-release` presets inherit from it.
 
-It stores named configure/build configurations so the same commands can be reused from command line and VS Code.
-
-Main presets:
-
-- `clang-debug`
-- `clang-release`
-- `clang-cl-vs2022`
-
-`clang-debug` configures:
-
-- generator: `Ninja`
-- build folder: `build/clang-debug`
-- build type: `Debug`
-- compiler: `clang++`
-- `compile_commands.json` export enabled
-
-`clang-release` configures:
-
-- generator: `Ninja`
-- build folder: `build/clang-release`
-- build type: `Release`
-- compiler: `clang++`
-- `compile_commands.json` export enabled
-
-Used by:
-
-- CMake command line, for example `cmake --preset clang-debug`
-- VS Code CMake Tools extension
-- VS Code tasks
-
-Not used directly by:
-
-- Ninja
-- Clang
-
-CMake reads this file and then calls Ninja and Clang with generated build instructions.
+Used by CMake on the command line (`cmake --preset clang-debug`) and by the CMake Tools extension in VS Code.
 
 ### `src/main.cpp`
 
-Application source file.
-
-It contains the `main()` function and currently prints:
-
-```text
-Hello from C++20, CMake, and Clang!
-```
-
-Used by:
-
-- Clang compiler
-
-The file is included in the build through `CMakeLists.txt`.
-
-### `.vscode/settings.json`
-
-VS Code workspace settings.
-
-It configures VS Code and the C/C++ extension.
-
-Important settings:
-
-```json
-"cmake.useCMakePresets": "always"
-```
-
-Tells VS Code CMake Tools to use `CMakePresets.json`.
-
-```json
-"C_Cpp.default.configurationProvider": "ms-vscode.cmake-tools"
-```
-
-Tells the C/C++ extension to get IntelliSense configuration from CMake Tools.
-
-```json
-"C_Cpp.default.compileCommands": "${workspaceFolder}/build/clang-debug/compile_commands.json"
-```
-
-Points IntelliSense to the generated compilation database.
-
-```json
-"C_Cpp.default.compilerPath": "C:/Program Files/LLVM/bin/clang++.exe"
-```
-
-Tells IntelliSense which compiler model to use.
-
-Used by:
-
-- VS Code
-- C/C++ extension
-- CMake Tools extension
-
-Not used by:
-
-- command-line CMake
-- Ninja
-- Clang during command-line builds
-
-### `.vscode/tasks.json`
-
-VS Code task definitions.
-
-It defines commands for:
-
-- configuring Debug
-- building Debug
-- running Debug
-- configuring Release
-- building Release
-- running Release
-
-The default build task is:
-
-```text
-CMake: build clang-debug
-```
-
-Each build/configure task calls `tools/cmake_with_vsdev.cmd`.
-
-This is needed because Clang on Windows needs the MSVC and Windows SDK environment variables.
-
-Used by:
-
-- VS Code task runner
-
-Not used directly by:
-
-- CMake
-- Ninja
-- Clang
-
-The task runner starts CMake, and CMake starts Ninja/Clang.
-
-### `.vscode/launch.json`
-
-VS Code debug configuration.
-
-It tells VS Code how to launch the built executable in debug mode.
-
-Current debug target:
-
-```text
-${workspaceFolder}/build/clang-debug/live_d.exe
-```
-
-It also runs this task before debugging:
-
-```text
-CMake: build clang-debug
-```
-
-Used by:
-
-- VS Code debugger
-- C/C++ extension debug adapter
-
-Not used by:
-
-- command-line CMake
-- Ninja
-- Clang
+Application entry point. Currently prints a message and exits.
 
 ### `tools/cmake_with_vsdev.cmd`
 
-Helper script used by VS Code tasks and command-line builds.
+Helper script for terminal builds. Activates the Visual Studio Build Tools environment via `VsDevCmd.bat`, then forwards all arguments to CMake. Required because Clang on Windows needs `INCLUDE` and `LIB` set to find MSVC headers and libraries.
 
-It first activates the Visual Studio Build Tools environment:
+### `.vscode/cmake-kits.json`
 
-```cmd
-call "C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\Common7\Tools\VsDevCmd.bat" -arch=x64 -host_arch=x64
-```
+Local cmake kit definition for the CMake Tools extension. Sets the same `INCLUDE`, `LIB`, and `LIBPATH` environment variables that `VsDevCmd.bat` sets, so VS Code builds and IntelliSense use the same paths as terminal builds.
 
-Then it forwards all arguments to CMake:
+Select this kit once after cloning: `Ctrl+Shift+P` → `CMake: Select a Kit`.
 
-```cmd
-cmake %*
-```
+### `.vscode/tasks.json`
 
-This avoids fragile quoting inside `.vscode/tasks.json` and makes command-line builds shorter.
+VS Code task definitions. Six tasks:
+
+- `CMake: configure clang-debug` — runs cmake configure for debug
+- `CMake: build clang-debug` — builds debug (default build task, depends on configure)
+- `Run debug app` — runs `live_d.exe`
+- `CMake: configure clang-release` — runs cmake configure for release
+- `CMake: build clang-release` — builds release
+- `Run release app` — runs `live.exe`
+
+All build and configure tasks call `tools/cmake_with_vsdev.cmd` to ensure the MSVC environment is active.
+
+### `.vscode/launch.json`
+
+Debug configuration. Launches `live_d.exe` using the Visual Studio debugger (`cppvsdbg`). Automatically runs `CMake: build clang-debug` before starting the debugger.
+
+### `.vscode/settings.json`
+
+Workspace settings for VS Code and the C/C++ extension.
+
+- `cmake.useCMakePresets: always` — uses `CMakePresets.json`
+- `cmake.configureOnOpen: true` — configures automatically on open
+- `C_Cpp.default.configurationProvider: ms-vscode.cmake-tools` — IntelliSense config from CMake Tools
+- `C_Cpp.default.compileCommands` — points IntelliSense to the generated compilation database
+- `C_Cpp.default.compilerPath` — tells the C/C++ extension which compiler model to use
 
 ### `build/`
 
-Generated build directory.
+Generated by CMake and Ninja. Not committed to version control.
 
-This folder is created by CMake and Ninja. It contains generated files, object files, and executables.
+Key generated files:
 
-Important generated files:
+```
+build/clang-debug/live_d.exe
+build/clang-release/live.exe
+build/clang-debug/compile_commands.json   — used by IntelliSense
+build/clang-debug/build.ninja
+build/clang-release/build.ninja
+```
 
-- `build/clang-debug/live_d.exe`
-- `build/clang-release/live.exe`
-- `build/clang-debug/compile_commands.json`
-- `build/clang-debug/build.ninja`
-- `build/clang-release/build.ninja`
-
-Normally this directory should not be edited manually.
+---
 
 ## Tool Responsibilities
 
-### VS Code
-
-Provides editing, tasks, IntelliSense, and debugging UI.
-
-Uses:
-
-- `.vscode/settings.json`
-- `.vscode/tasks.json`
-- `.vscode/launch.json`
-- `CMakePresets.json` through CMake Tools
-
-### CMake
-
-Configures the project and generates Ninja build files.
-
-Uses:
-
-- `CMakeLists.txt`
-- `CMakePresets.json`
-
-Produces:
-
-- `build.ninja`
-- `compile_commands.json`
-- CMake cache files
-
-### Ninja
-
-Runs the actual build steps generated by CMake.
-
-Uses:
-
-- `build/clang-debug/build.ninja`
-- `build/clang-release/build.ninja`
-
-Starts:
-
-- `clang++`
-- linker
-
-### Clang
-
-Compiles C++ source files and links the executable.
-
-Uses:
-
-- `src/main.cpp`
-- compiler flags generated by CMake
-- MSVC runtime libraries
-- Windows SDK libraries
-
-Produces:
-
-- object files
-- `live_d.exe`
-- `live.exe`
-
-### Visual Studio Build Tools
-
-Provides Windows C++ runtime libraries, headers, and SDK paths needed by Clang.
-
-The project activates this environment through:
-
-```text
-VsDevCmd.bat
-```
-
-Without this step, Clang may fail with errors such as:
-
-```text
-lld-link: error: could not open 'oldnames.lib': no such file or directory
-lld-link: error: could not open 'msvcrtd.lib': no such file or directory
-```
+| Tool | Reads | Produces |
+|---|---|---|
+| **VS Code** | `.vscode/` settings, `CMakePresets.json` via CMake Tools | editor, tasks, debug UI |
+| **CMake Tools extension** | `cmake-kits.json`, `CMakePresets.json`, `CMakeLists.txt` | configures project, provides IntelliSense data |
+| **CMake** | `CMakeLists.txt`, `CMakePresets.json` | `build.ninja`, `compile_commands.json` |
+| **Ninja** | `build.ninja` | calls clang++, produces object files and executables |
+| **Clang** | `src/main.cpp`, compiler flags from CMake, MSVC headers via `INCLUDE` | `live_d.exe`, `live.exe` |
+| **VsDevCmd.bat** | VS Build Tools installation | sets `INCLUDE`, `LIB`, `LIBPATH` for terminal builds |
+| **cmake-kits.json** | — | sets `INCLUDE`, `LIB`, `LIBPATH` for VS Code builds |
