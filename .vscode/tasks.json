@@ -5,7 +5,10 @@
             "label": "CMake: configure clang-debug",
             "type": "process",
             "command": "${workspaceFolder}\\tools\\cmake_with_vsdev.cmd",
-            "args": ["--preset", "clang-debug"],
+            "args": [
+                "--preset",
+                "clang-debug"
+            ],
             "group": "build",
             "problemMatcher": []
         },
@@ -13,12 +16,18 @@
             "label": "CMake: build clang-debug",
             "type": "process",
             "command": "${workspaceFolder}\\tools\\cmake_with_vsdev.cmd",
-            "args": ["--build", "--preset", "clang-debug"],
+            "args": [
+                "--build",
+                "--preset",
+                "clang-debug"
+            ],
             "group": {
                 "kind": "build",
                 "isDefault": true
             },
-            "problemMatcher": ["$gcc"],
+            "problemMatcher": [
+                "$gcc"
+            ],
             "dependsOn": "CMake: configure clang-debug"
         },
         {
@@ -32,7 +41,10 @@
             "label": "CMake: configure clang-release",
             "type": "process",
             "command": "${workspaceFolder}\\tools\\cmake_with_vsdev.cmd",
-            "args": ["--preset", "clang-release"],
+            "args": [
+                "--preset",
+                "clang-release"
+            ],
             "group": "build",
             "problemMatcher": []
         },
@@ -40,9 +52,15 @@
             "label": "CMake: build clang-release",
             "type": "process",
             "command": "${workspaceFolder}\\tools\\cmake_with_vsdev.cmd",
-            "args": ["--build", "--preset", "clang-release"],
+            "args": [
+                "--build",
+                "--preset",
+                "clang-release"
+            ],
             "group": "build",
-            "problemMatcher": ["$gcc"],
+            "problemMatcher": [
+                "$gcc"
+            ],
             "dependsOn": "CMake: configure clang-release"
         },
         {
@@ -51,6 +69,6 @@
             "command": "${workspaceFolder}\\build\\clang-release\\live.exe",
             "dependsOn": "CMake: build clang-release",
             "problemMatcher": []
-        }
+        },
     ]
 }
