@@ -2,6 +2,8 @@
 
 Minimal C++20 project configured for VS Code, CMake, Clang/LLVM, and Ninja on Windows.
 
+The application renders a hexagonal sphere (Goldberg polyhedron) with an interactive 3D camera.
+
 ## Required Tools
 
 ### Visual Studio Code
@@ -96,6 +98,35 @@ $output | Select-String '^(INCLUDE|LIB|LIBPATH)='
 
 Then update `INCLUDE`, `LIB`, and `LIBPATH` in `.vscode/cmake-kits.json`.
 
+### How third-party headers become visible in VS Code
+
+When you write `#include "raylib.h"`, VS Code resolves it through this chain:
+
+```
+CMakeLists.txt
+  target_link_libraries(clang_cmake_app PRIVATE raylib)
+       │
+       │  RayLib declares its src/ as PUBLIC include directory
+       ▼
+  CMake generates compile_commands.json
+  with flag: -I third_party/raylib/src
+       │
+       ▼
+  .vscode/settings.json
+  "C_Cpp.default.compileCommands": ".../compile_commands.json"
+       │
+       ▼
+  IntelliSense reads -I flags → finds raylib.h → autocomplete works
+```
+
+The key is `PUBLIC` in RayLib's own CMakeLists: any target that links against `raylib` automatically inherits its include directories. No manual path configuration is needed in `.vscode/settings.json`.
+
+If IntelliSense stops finding headers after CMake changes, re-run configure:
+
+```powershell
+.\tools\cmake_with_vsdev.cmd --preset clang-debug
+```
+
 ---
 
 ## Build and Run
@@ -141,80 +172,122 @@ Output names are configured in `CMakeLists.txt` using `OUTPUT_NAME` and `DEBUG_P
 
 ---
 
+## Application: Hexagonal Sphere
+
+The application renders a **Goldberg polyhedron** — a sphere tiled with hexagons and exactly 12 pentagons (the 12 pentagons are a topological requirement; a sphere cannot be tiled with hexagons alone).
+
+### Controls
+
+| Input | Action |
+|---|---|
+| LMB drag | rotate sphere |
+| Mouse wheel | zoom in / out |
+| Tab | toggle camera mode |
+
+Camera modes: **Mouse Orbit** (manual control) and **Auto Orbital** (continuous rotation).
+
+### Face counts by subdivision level
+
+| Subdivisions | Hexagons | Pentagons | Total faces |
+|---|---|---|---|
+| 1 | 30 | 12 | 42 |
+| 2 | 150 | 12 | 162 |
+| 3 | 630 | 12 | 642 |
+| 4 | 2 550 | 12 | 2 562 |
+
+Formula: `10 × (4ᴺ − 1)` hexagons. Default is subdivision level 3.
+
+### How the mesh is constructed
+
+The hexagonal sphere is built as the **dual mesh** of a geodesic sphere:
+
+```
+par_shapes_create_subdivided_sphere(N)
+    → geodesic sphere: icosahedron subdivided N times,
+      all vertices projected onto unit sphere
+
+For each vertex V of the geodesic mesh:
+    → collect all adjacent triangles
+    → compute centroid of each triangle (projected onto sphere)
+    → sort centroids CCW in the tangent plane at V
+    → these ordered centroids form one face of the dual mesh
+
+Result: HexSphere
+    → 5-sided faces at the 12 original icosahedron vertices (pentagons)
+    → 6-sided faces everywhere else (hexagons)
+```
+
+### Libraries used
+
+**RayLib** (`third_party/raylib/`)
+
+OpenGL-based rendering library. Provides window creation, 3D camera, and `DrawLine3D` for wireframe rendering. Included in the project as source via `add_subdirectory`.
+
+**par_shapes** (`third_party/raylib/src/external/par_shapes.h`)
+
+Single-header C library bundled inside RayLib. Used for geodesic sphere generation: `par_shapes_create_subdivided_sphere(N)` creates an icosahedron, subdivides it N times, and projects all vertices onto the unit sphere. The implementation is compiled as part of RayLib — no separate compilation needed.
+
+**hexsphere** (`src/hexsphere.h`, `src/hexsphere.cpp`)
+
+Project code. Builds the dual mesh from the par_shapes geodesic output, computing the Goldberg polyhedron topology with correct face winding. The resulting `HexSphere` struct stores vertices and faces, with each face carrying its vertex indices and a pentagon/hexagon flag. This topology is the foundation for the future Game of Life simulation.
+
+---
+
 ## Project Files
 
 ### `CMakeLists.txt`
 
-Main CMake project file. Defines the executable target, sets C++20, enables warnings, and configures output names.
-
-```cmake
-add_executable(clang_cmake_app src/main.cpp)
-target_compile_features(clang_cmake_app PRIVATE cxx_std_20)
-target_compile_options(clang_cmake_app PRIVATE -Wall -Wextra -Wpedantic)
-set_target_properties(clang_cmake_app PROPERTIES OUTPUT_NAME "live" DEBUG_POSTFIX "_d")
-```
-
-`DEBUG_POSTFIX "_d"` appends `_d` to the executable name in Debug configuration, producing `live_d.exe`.
+Main CMake project file. Links against RayLib via `add_subdirectory`, which automatically propagates RayLib's include directories to the executable target.
 
 ### `CMakePresets.json`
 
 Named configure and build configurations. A hidden `base` preset holds shared settings (Ninja generator, clang++ compiler, `compile_commands.json` export). The `clang-debug` and `clang-release` presets inherit from it.
 
-Used by CMake on the command line (`cmake --preset clang-debug`) and by the CMake Tools extension in VS Code.
-
 ### `src/main.cpp`
 
-Application entry point. Currently prints a message and exits.
+Application entry point. Initializes RayLib window, creates the hexagonal sphere, and runs the render loop with mouse-controlled camera.
+
+### `src/hexsphere.h` / `src/hexsphere.cpp`
+
+Hexagonal sphere generator. Calls par_shapes to get a geodesic sphere, then builds the dual mesh (Goldberg polyhedron) by sorting triangle centroids around each vertex in the tangent plane. The `HexSphere` struct holds all vertices and faces with adjacency information.
 
 ### `tools/cmake_with_vsdev.cmd`
 
-Helper script for terminal builds. Activates the Visual Studio Build Tools environment via `VsDevCmd.bat`, then forwards all arguments to CMake. Required because Clang on Windows needs `INCLUDE` and `LIB` set to find MSVC headers and libraries.
+Helper script for terminal builds. Activates the Visual Studio Build Tools environment via `VsDevCmd.bat`, then forwards all arguments to CMake.
+
+### `third_party/raylib/`
+
+RayLib 5.5 source, vendored directly into the project. Built as part of the CMake project via `add_subdirectory`. Contains `src/external/par_shapes.h` which is used for geodesic sphere generation.
 
 ### `.vscode/cmake-kits.json`
 
-Local cmake kit definition for the CMake Tools extension. Sets the same `INCLUDE`, `LIB`, and `LIBPATH` environment variables that `VsDevCmd.bat` sets, so VS Code builds and IntelliSense use the same paths as terminal builds.
+Local cmake kit definition. Sets `INCLUDE`, `LIB`, and `LIBPATH` to the same values that `VsDevCmd.bat` sets, ensuring IntelliSense and builds use identical paths.
 
 Select this kit once after cloning: `Ctrl+Shift+P` → `CMake: Select a Kit`.
 
 ### `.vscode/tasks.json`
 
-VS Code task definitions. Six tasks:
-
-- `CMake: configure clang-debug` — runs cmake configure for debug
-- `CMake: build clang-debug` — builds debug (default build task, depends on configure)
-- `Run debug app` — runs `live_d.exe`
-- `CMake: configure clang-release` — runs cmake configure for release
-- `CMake: build clang-release` — builds release
-- `Run release app` — runs `live.exe`
-
-All build and configure tasks call `tools/cmake_with_vsdev.cmd` to ensure the MSVC environment is active.
+Six build tasks: configure + build + run for both debug and release. All call `tools/cmake_with_vsdev.cmd`.
 
 ### `.vscode/launch.json`
 
-Debug configuration. Launches `live_d.exe` using the Visual Studio debugger (`cppvsdbg`). Automatically runs `CMake: build clang-debug` before starting the debugger.
+Debug configuration. Launches `live_d.exe` using the Visual Studio debugger (`cppvsdbg`), automatically building before launch.
 
 ### `.vscode/settings.json`
 
-Workspace settings for VS Code and the C/C++ extension.
+Workspace settings. Key entries:
 
-- `cmake.useCMakePresets: always` — uses `CMakePresets.json`
-- `cmake.configureOnOpen: true` — configures automatically on open
 - `C_Cpp.default.configurationProvider: ms-vscode.cmake-tools` — IntelliSense config from CMake Tools
-- `C_Cpp.default.compileCommands` — points IntelliSense to the generated compilation database
-- `C_Cpp.default.compilerPath` — tells the C/C++ extension which compiler model to use
+- `C_Cpp.default.compileCommands` — points to generated `compile_commands.json`
 
 ### `build/`
 
 Generated by CMake and Ninja. Not committed to version control.
 
-Key generated files:
-
 ```
 build/clang-debug/live_d.exe
 build/clang-release/live.exe
 build/clang-debug/compile_commands.json   — used by IntelliSense
-build/clang-debug/build.ninja
-build/clang-release/build.ninja
 ```
 
 ---
@@ -227,6 +300,8 @@ build/clang-release/build.ninja
 | **CMake Tools extension** | `cmake-kits.json`, `CMakePresets.json`, `CMakeLists.txt` | configures project, provides IntelliSense data |
 | **CMake** | `CMakeLists.txt`, `CMakePresets.json` | `build.ninja`, `compile_commands.json` |
 | **Ninja** | `build.ninja` | calls clang++, produces object files and executables |
-| **Clang** | `src/main.cpp`, compiler flags from CMake, MSVC headers via `INCLUDE` | `live_d.exe`, `live.exe` |
+| **Clang** | `src/*.cpp`, compiler flags from CMake, MSVC headers via `INCLUDE` | `live_d.exe`, `live.exe` |
+| **RayLib** | — | window, OpenGL context, 3D rendering |
+| **par_shapes** | — | geodesic sphere mesh (bundled in RayLib) |
 | **VsDevCmd.bat** | VS Build Tools installation | sets `INCLUDE`, `LIB`, `LIBPATH` for terminal builds |
 | **cmake-kits.json** | — | sets `INCLUDE`, `LIB`, `LIBPATH` for VS Code builds |

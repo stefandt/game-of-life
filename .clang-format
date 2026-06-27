@@ -1,0 +1,56 @@
+---
+Language: Cpp
+BasedOnStyle: Microsoft
+
+# Indentation
+IndentWidth: 4
+TabWidth: 4
+UseTab: Never
+NamespaceIndentation: None
+
+# Column limit
+ColumnLimit: 100
+
+# Braces: function body on new line, control flow attached
+BreakBeforeBraces: Custom
+BraceWrapping:
+  AfterFunction:        true
+  AfterControlStatement: false
+  AfterClass:           false
+  AfterEnum:            false
+  AfterNamespace:       false
+  AfterStruct:          false
+  AfterUnion:           false
+  BeforeElse:           false
+  BeforeCatch:          false
+  IndentBraces:         false
+  SplitEmptyFunction:   false
+  SplitEmptyRecord:     false
+  SplitEmptyNamespace:  false
+
+# Pointers and references aligned right: Type* var
+PointerAlignment: Right
+ReferenceAlignment: Right
+
+# Short constructs
+AllowShortFunctionsOnASingleLine:    None
+AllowShortIfStatementsOnASingleLine: Never
+AllowShortLoopsOnASingleLine:        true
+AllowShortBlocksOnASingleLine:       Empty
+
+# Align consecutive = signs in declarations
+AlignConsecutiveAssignments:
+  Enabled:          true
+  AcrossEmptyLines: false
+  AcrossComments:   false
+
+AlignConsecutiveDeclarations:
+  Enabled:          false
+
+# Spaces
+SpaceBeforeParens: ControlStatements
+SpacesBeforeTrailingComments: 2
+
+# Includes: keep existing order, don't auto-sort
+SortIncludes: false
+IncludeBlocks: Preserve

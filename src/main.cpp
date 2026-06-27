@@ -2,12 +2,21 @@
 #include "hexsphere.h"
 #include "raymath.h"
 
-enum class CameraMode { MouseOrbit, Orbital };
+enum class ViewMode { Orbital, MouseOrbit };
+
+static void hud(Font f, const char* s, float x, float y, float sz, Color c)
+{
+    DrawTextPro(f, s, {x, y}, {0, 0}, 0.0f, sz, sz * 0.16f, c);
+}
 
 int main()
 {
-    InitWindow(1600, 1200, "Hex Sphere");
+    SetConfigFlags(FLAG_WINDOW_RESIZABLE);
+    InitWindow(1400, 800, "Hex Sphere — Goldberg Polyhedron");
     SetTargetFPS(60);
+
+    Font font = GetFontDefault();
+    SetTextureFilter(font.texture, TEXTURE_FILTER_POINT);
 
     const HexSphere sphere = HexSphere::create(3, 3.0f);
 
@@ -16,26 +25,31 @@ int main()
         if (!f.pentagon) ++hex_count;
 
     Camera3D cam   = {};
+    cam.position   = {0.0f, 0.0f, 9.0f};
     cam.target     = {0.0f, 0.0f, 0.0f};
     cam.up         = {0.0f, 1.0f, 0.0f};
     cam.fovy       = 45.0f;
     cam.projection = CAMERA_PERSPECTIVE;
 
-    CameraMode mode = CameraMode::MouseOrbit;
+    ViewMode mode  = ViewMode::Orbital;
 
     float yaw      = 0.0f;
     float pitch    = 20.0f;
     float distance = 9.0f;
 
     while (!WindowShouldClose()) {
-        // Tab — переключение режима
         if (IsKeyPressed(KEY_TAB)) {
-            mode = (mode == CameraMode::MouseOrbit)
-                 ? CameraMode::Orbital
-                 : CameraMode::MouseOrbit;
+            if (mode == ViewMode::Orbital) {
+                distance = Vector3Length(cam.position);
+                pitch    = asinf(cam.position.y / distance) * RAD2DEG;
+                yaw      = atan2f(cam.position.x, cam.position.z) * RAD2DEG;
+                mode     = ViewMode::MouseOrbit;
+            } else {
+                mode = ViewMode::Orbital;
+            }
         }
 
-        if (mode == CameraMode::MouseOrbit) {
+        if (mode == ViewMode::MouseOrbit) {
             if (IsMouseButtonDown(MOUSE_BUTTON_LEFT)) {
                 Vector2 delta = GetMouseDelta();
                 yaw   -= delta.x * 0.3f;
@@ -75,15 +89,27 @@ int main()
         }
         EndMode3D();
 
-        const char* mode_str = (mode == CameraMode::MouseOrbit)
-            ? "Mouse Orbit  (Tab to switch)"
-            : "Auto Orbital  (Tab to switch)";
+        // HUD
+        DrawRectangle(0, 0, 420, 120, Fade(BLACK, 0.6f));
 
-        DrawText(TextFormat("%d hexagons  12 pentagons", hex_count), 10, 10, 20, WHITE);
-        DrawText(mode_str, 10, 40, 18, GRAY);
-        if (mode == CameraMode::MouseOrbit)
-            DrawText("LMB drag: rotate   wheel: zoom", 10, 62, 18, GRAY);
-        DrawFPS(10, 90);
+        hud(font, "Goldberg Polyhedron",                               12, 10, 22, WHITE);
+        hud(font, TextFormat("%d hexagons   12 pentagons", hex_count), 12, 36, 20, LIGHTGRAY);
+
+        DrawLineEx({12, 61}, {408, 61}, 1, Fade(WHITE, 0.15f));
+
+        if (mode == ViewMode::Orbital) {
+            hud(font, "Auto-rotate",                  12, 68, 20, YELLOW);
+            hud(font, "[Tab]  switch to Mouse Orbit", 12, 98, 20, DARKGRAY);
+        } else {
+            hud(font, "Mouse Orbit",                      12, 68, 20, YELLOW);
+            hud(font, "[Tab]  switch to Auto-rotate",     12, 98, 20, DARKGRAY);
+            hud(font, "[LMB] rotate  [Scroll] zoom",      20, 128, 20, DARKGRAY);
+        }
+
+        // FPS — top right, tracks window width on resize
+        hud(font, TextFormat("%d FPS", GetFPS()),
+            (float)GetScreenWidth() - 80.0f, 10.0f, 20.0f, LIME);
+
         EndDrawing();
     }
 
