@@ -1,102 +1,118 @@
 #include "hexsphere.h"
-#include "par_shapes.h"
 
-#include <algorithm>
+#include <OpenMesh/Core/Mesh/PolyMesh_ArrayKernelT.hh>
+#include <OpenMesh/Core/Mesh/TriMesh_ArrayKernelT.hh>
+#include <OpenMesh/Tools/Subdivider/Uniform/LoopT.hh>
+
+#include <array>
 #include <cmath>
 #include <vector>
 
+using TriMesh = OpenMesh::TriMesh_ArrayKernelT<>;
+using PolyMesh = OpenMesh::PolyMesh_ArrayKernelT<>;
+
 namespace {
 
-// Centroid of triangle ti, projected onto unit sphere
-Vector3 tri_centroid_on_sphere(const par_shapes_mesh* m, int ti)
+// Icosahedron — 12 vertices, 20 triangular faces.
+// Vertex set: permutations of (0, ±1, ±φ), normalized to unit sphere.
+// Face winding: CCW from outside (matches three.js IcosahedronGeometry).
+TriMesh make_icosahedron()
 {
-    float x = 0, y = 0, z = 0;
-    for (int j = 0; j < 3; ++j) {
-        int vi = m->triangles[ti * 3 + j];
-        x += m->points[vi * 3 + 0];
-        y += m->points[vi * 3 + 1];
-        z += m->points[vi * 3 + 2];
-    }
-    x /= 3.0f; y /= 3.0f; z /= 3.0f;
-    float len = std::sqrt(x*x + y*y + z*z);
-    return {x / len, y / len, z / len};
+    TriMesh m;
+    const float t = (1.0f + sqrtf(5.0f)) / 2.0f;
+
+    auto add = [&](float x, float y, float z) {
+        float l = sqrtf(x * x + y * y + z * z);
+        return m.add_vertex(TriMesh::Point(x / l, y / l, z / l));
+    };
+
+    std::array<TriMesh::VertexHandle, 12> v = {
+        add(-1,  t,  0), add( 1,  t,  0),  // 0  1
+        add(-1, -t,  0), add( 1, -t,  0),  // 2  3
+        add( 0, -1,  t), add( 0,  1,  t),  // 4  5
+        add( 0, -1, -t), add( 0,  1, -t),  // 6  7
+        add( t,  0, -1), add( t,  0,  1),  // 8  9
+        add(-t,  0, -1), add(-t,  0,  1),  // 10 11
+    };
+
+    auto f = [&](int a, int b, int c) { m.add_face(v[a], v[b], v[c]); };
+
+    f(0,11,5);  f(0,5,1);   f(0,1,7);   f(0,7,10);  f(0,10,11);
+    f(1,5,9);   f(5,11,4);  f(11,10,2); f(10,7,6);  f(7,1,8);
+    f(3,9,4);   f(3,4,2);   f(3,2,6);   f(3,6,8);   f(3,8,9);
+    f(4,9,5);   f(2,4,11);  f(6,2,10);  f(8,6,7);   f(9,8,1);
+
+    return m;
 }
 
-// Sort triangle indices around vertex vi by CCW angle in the tangent plane.
-// Result is CCW when viewed from outside the sphere.
-std::vector<int> sort_around_vertex(
-    const par_shapes_mesh* m, int vi, const std::vector<int>& tris)
+// Dual mesh of a triangulated sphere → Goldberg polyhedron.
+// Each primal face becomes a dual vertex (centroid projected to sphere).
+// Each primal vertex becomes a dual face; vf_range gives CCW face order.
+PolyMesh build_dual(const TriMesh& primal, float radius)
 {
-    float nx = m->points[vi*3+0];
-    float ny = m->points[vi*3+1];
-    float nz = m->points[vi*3+2];
+    PolyMesh dual;
 
-    // Build an orthonormal tangent frame (T1, T2) perpendicular to N
-    float ux = (std::abs(nx) < 0.9f) ? 1.0f : 0.0f;
-    float uy = (std::abs(nx) < 0.9f) ? 0.0f : 1.0f;
-    float uz = 0.0f;
-    float d  = ux*nx + uy*ny + uz*nz;
-    float t1x = ux - d*nx, t1y = uy - d*ny, t1z = uz - d*nz;
-    float t1l = std::sqrt(t1x*t1x + t1y*t1y + t1z*t1z);
-    t1x /= t1l; t1y /= t1l; t1z /= t1l;
-    // T2 = N × T1  (CCW rotation axis when viewed from outside)
-    float t2x = ny*t1z - nz*t1y;
-    float t2y = nz*t1x - nx*t1z;
-    float t2z = nx*t1y - ny*t1x;
-
-    std::vector<std::pair<float, int>> angle_ti;
-    angle_ti.reserve(tris.size());
-    for (int ti : tris) {
-        Vector3 c = tri_centroid_on_sphere(m, ti);
-        // Vector from vertex to centroid, projected to tangent plane
-        float dx = c.x - nx, dy = c.y - ny, dz = c.z - nz;
-        float nd = dx*nx + dy*ny + dz*nz;
-        float px = dx - nd*nx, py = dy - nd*ny, pz = dz - nd*nz;
-        float angle = std::atan2(px*t2x + py*t2y + pz*t2z,
-                                  px*t1x + py*t1y + pz*t1z);
-        angle_ti.push_back({angle, ti});
+    std::vector<PolyMesh::VertexHandle> fh_to_dvh(primal.n_faces());
+    for (auto fh : primal.faces()) {
+        TriMesh::Point c(0, 0, 0);
+        for (auto vfh : primal.fv_range(fh))
+            c += primal.point(vfh);
+        c /= 3.0f;
+        c = c.normalized() * radius;
+        fh_to_dvh[fh.idx()] = dual.add_vertex(c);
     }
-    std::sort(angle_ti.begin(), angle_ti.end());
 
-    std::vector<int> result;
-    result.reserve(tris.size());
-    for (auto& [a, ti] : angle_ti) result.push_back(ti);
-    return result;
+    for (auto vh : primal.vertices()) {
+        std::vector<PolyMesh::VertexHandle> dv;
+        for (auto fh : primal.vf_range(vh))
+            dv.push_back(fh_to_dvh[fh.idx()]);
+        if (dv.size() >= 3)
+            dual.add_face(dv);
+    }
+
+    return dual;
 }
 
-} // namespace
+}  // namespace
 
 HexSphere HexSphere::create(int subdivisions, float radius)
 {
-    par_shapes_mesh* geo = par_shapes_create_subdivided_sphere(subdivisions);
+    // 1. Base icosahedron
+    TriMesh primal = make_icosahedron();
 
-    // vertex → adjacent triangle indices
-    std::vector<std::vector<int>> v2t(geo->npoints);
-    for (int ti = 0; ti < geo->ntriangles; ++ti)
-        for (int j = 0; j < 3; ++j)
-            v2t[geo->triangles[ti*3 + j]].push_back(ti);
+    // 2. Loop subdivision (each triangle → 4, vertices smoothed)
+    OpenMesh::Subdivider::Uniform::LoopT<TriMesh> subdivider;
+    subdivider.attach(primal);
+    subdivider(subdivisions);
+    subdivider.detach();
 
+    // 3. Project all vertices onto the sphere
+    for (auto vh : primal.vertices()) {
+        auto p = primal.point(vh);
+        primal.set_point(vh, p.normalized() * radius);
+    }
+
+    // 4. Build dual mesh (Goldberg polyhedron)
+    const PolyMesh dual = build_dual(primal, radius);
+
+    // 5. Extract into HexSphere
     HexSphere result;
 
-    // Dual vertices = triangle centroids on sphere
-    result.verts.resize(geo->ntriangles);
-    for (int ti = 0; ti < geo->ntriangles; ++ti) {
-        Vector3 c = tri_centroid_on_sphere(geo, ti);
-        result.verts[ti] = {c.x * radius, c.y * radius, c.z * radius};
+    result.verts.resize(dual.n_vertices());
+    for (auto vh : dual.vertices()) {
+        auto p = dual.point(vh);
+        result.verts[vh.idx()] = {p[0], p[1], p[2]};
     }
 
-    // Dual faces = one per primal vertex
-    result.faces.reserve(geo->npoints);
-    for (int vi = 0; vi < geo->npoints; ++vi) {
-        const auto& tris = v2t[vi];
-        if (tris.empty()) continue;
-
-        HexFace face;
-        face.verts    = sort_around_vertex(geo, vi, tris);
+    result.faces.resize(dual.n_faces());
+    for (auto fh : dual.faces()) {
+        auto& face = result.faces[fh.idx()];
+        for (auto vh : dual.fv_range(fh))
+            face.verts.push_back(vh.idx());
         face.pentagon = (face.verts.size() == 5);
-        result.faces.push_back(std::move(face));
+        for (auto ffh : dual.ff_range(fh))
+            face.neighbors.push_back(ffh.idx());
     }
 
-    par_shapes_free_mesh(geo);
     return result;
 }
