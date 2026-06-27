@@ -1,40 +1,31 @@
-﻿{
+{
   "version": 3,
   "configurePresets": [
     {
-      "name": "clang-debug",
-      "displayName": "Clang Debug (Ninja)",
-      "description": "Configure a Debug build using clang++ and Ninja.",
+      "name": "base",
+      "hidden": true,
       "generator": "Ninja",
-      "binaryDir": "${sourceDir}/build/clang-debug",
       "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Debug",
         "CMAKE_CXX_COMPILER": "clang++",
         "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
+      }
+    },
+    {
+      "name": "clang-debug",
+      "displayName": "Clang Debug",
+      "inherits": "base",
+      "binaryDir": "${sourceDir}/build/clang-debug",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug"
       }
     },
     {
       "name": "clang-release",
-      "displayName": "Clang Release (Ninja)",
-      "description": "Configure a Release build using clang++ and Ninja.",
-      "generator": "Ninja",
+      "displayName": "Clang Release",
+      "inherits": "base",
       "binaryDir": "${sourceDir}/build/clang-release",
       "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Release",
-        "CMAKE_CXX_COMPILER": "clang++",
-        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
-      }
-    },
-    {
-      "name": "clang-cl-vs2022",
-      "displayName": "ClangCL Debug (Visual Studio 2022)",
-      "description": "Configure a Debug build using Visual Studio 2022 generator with the ClangCL toolset.",
-      "generator": "Visual Studio 17 2022",
-      "architecture": "x64",
-      "toolset": "ClangCL",
-      "binaryDir": "${sourceDir}/build/clang-cl-vs2022",
-      "cacheVariables": {
-        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
+        "CMAKE_BUILD_TYPE": "Release"
       }
     }
   ],
@@ -46,11 +37,6 @@
     {
       "name": "clang-release",
       "configurePreset": "clang-release"
-    },
-    {
-      "name": "clang-cl-vs2022-debug",
-      "configurePreset": "clang-cl-vs2022",
-      "configuration": "Debug"
     }
   ]
 }
