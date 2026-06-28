@@ -20,9 +20,12 @@ int main()
 
     const HexSphere sphere = HexSphere::create(3, 3.0f);
 
-    int hex_count = 0;
-    for (const auto& f : sphere.faces)
-        if (!f.pentagon) ++hex_count;
+    int hex_count  = 0;
+    int pent_count = 0;
+    for (const auto& f : sphere.faces) {
+        if (f.pentagon) ++pent_count;
+        else            ++hex_count;
+    }
 
     Camera3D cam   = {};
     cam.position   = {0.0f, 0.0f, 9.0f};
@@ -31,7 +34,7 @@ int main()
     cam.fovy       = 45.0f;
     cam.projection = CAMERA_PERSPECTIVE;
 
-    ViewMode mode  = ViewMode::Orbital;
+    ViewMode mode  = ViewMode::MouseOrbit;
 
     float yaw      = 0.0f;
     float pitch    = 20.0f;
@@ -53,8 +56,10 @@ int main()
             if (IsMouseButtonDown(MOUSE_BUTTON_LEFT)) {
                 Vector2 delta = GetMouseDelta();
                 yaw   -= delta.x * 0.3f;
-                pitch -= delta.y * 0.3f;
-                pitch  = Clamp(pitch, -89.0f, 89.0f);
+                pitch += delta.y * 0.3f;
+                // Pole crossing: flip over instead of clamping
+                if (pitch > 89.0f)  { pitch = 180.0f - pitch; yaw += 180.0f; }
+                if (pitch < -89.0f) { pitch = -180.0f - pitch; yaw += 180.0f; }
             }
             float wheel = GetMouseWheelMove();
             if (wheel != 0.0f) {
@@ -76,37 +81,45 @@ int main()
         ClearBackground(BLACK);
 
         BeginMode3D(cam);
-        for (const auto& face : sphere.faces) {
-            Color color = face.pentagon ? ORANGE : RAYWHITE;
-            int n = (int)face.verts.size();
-            for (int i = 0; i < n; ++i) {
-                DrawLine3D(
-                    sphere.verts[face.verts[i]],
-                    sphere.verts[face.verts[(i + 1) % n]],
-                    color
-                );
-            }
+
+        // Pass 1 — all hexagon edges (back edges visible — wireframe look)
+        for (int fi = 0; fi < (int)sphere.faces.size(); ++fi) {
+            if (sphere.faces[fi].pentagon) continue;
+            const HexFace& face = sphere.faces[fi];
+            const int n = (int)face.verts.size();
+            for (int i = 0; i < n; ++i)
+                DrawLine3D(sphere.verts[face.verts[i]],
+                           sphere.verts[face.verts[(i + 1) % n]], RAYWHITE);
         }
+
+        // Pass 2 — pentagon edges on top so shared edges stay orange
+        for (int fi = 0; fi < (int)sphere.faces.size(); ++fi) {
+            if (!sphere.faces[fi].pentagon) continue;
+            const HexFace& face = sphere.faces[fi];
+            const int n = (int)face.verts.size();
+            for (int i = 0; i < n; ++i)
+                DrawLine3D(sphere.verts[face.verts[i]],
+                           sphere.verts[face.verts[(i + 1) % n]], ORANGE);
+        }
+
         EndMode3D();
 
         // HUD
         DrawRectangle(0, 0, 420, 120, Fade(BLACK, 0.6f));
 
-        hud(font, "Goldberg Polyhedron",                               12, 10, 22, WHITE);
-        hud(font, TextFormat("%d hexagons   12 pentagons", hex_count), 12, 36, 20, LIGHTGRAY);
+        hud(font, "Goldberg Polyhedron",                                      12, 10, 22, WHITE);
+        hud(font, TextFormat("%d hexagons   %d pentagons", hex_count, pent_count),
+            12, 36, 20, LIGHTGRAY);
 
         DrawLineEx({12, 61}, {408, 61}, 1, Fade(WHITE, 0.15f));
 
         if (mode == ViewMode::Orbital) {
-            hud(font, "Auto-rotate",                  12, 68, 20, YELLOW);
-            hud(font, "[Tab]  switch to Mouse Orbit", 12, 98, 20, DARKGRAY);
+            hud(font, "Auto-rotate  [Tab] Mouse Orbit", 12, 68, 16, DARKGRAY);
         } else {
-            hud(font, "Mouse Orbit",                      12, 68, 20, YELLOW);
-            hud(font, "[Tab]  switch to Auto-rotate",     12, 98, 20, DARKGRAY);
-            hud(font, "[LMB] rotate  [Scroll] zoom",      20, 128, 20, DARKGRAY);
+            hud(font, "Mouse Orbit  [Tab] Auto-rotate", 12, 68, 16, YELLOW);
+            hud(font, "[LMB] rotate   [Scroll] zoom",   12, 90, 16, DARKGRAY);
         }
 
-        // FPS — top right, tracks window width on resize
         hud(font, TextFormat("%d FPS", GetFPS()),
             (float)GetScreenWidth() - 80.0f, 10.0f, 20.0f, LIME);
 
