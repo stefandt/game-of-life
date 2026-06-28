@@ -10,20 +10,84 @@ void GameWorld::rebuild(int subdiv)
     recount_faces();
 }
 
+// Precomputes per-face geometry that is constant for a given subdivision level
+// and reused every frame:
+//   face_centers[i] — centroid of face i projected onto the sphere surface.
+//                     Used as the "pole" of the fan triangulation and for
+//                     backface culling (dot product with camera direction).
+//   face_tan1/tan2[i] — orthonormal tangent frame in the face's local plane.
+//                       Used to compute radial UV coordinates when rendering
+//                       with the texture atlas (project corner → angle → UV).
+// Called once per rebuild(), not per frame.
 void GameWorld::recompute_centers()
 {
     sphere_r = Vector3Length(sphere->verts[0]);
-    face_centers.resize(sphere->faces.size());
-    for (int fi = 0; fi < (int)sphere->faces.size(); ++fi) {
+    const int nf = (int)sphere->faces.size();
+    face_centers.resize(nf);
+    face_tan1.resize(nf);
+    face_tan2.resize(nf);
+    face_uvs.resize(nf);
+
+    for (int fi = 0; fi < nf; ++fi) {
         const HexFace& face = sphere->faces[fi];
         const int n = (int)face.verts.size();
+
         Vector3 c = {0, 0, 0};
         for (int vi : face.verts) {
             c.x += sphere->verts[vi].x / n;
             c.y += sphere->verts[vi].y / n;
             c.z += sphere->verts[vi].z / n;
         }
-        face_centers[fi] = Vector3Scale(Vector3Normalize(c), sphere_r);
+        const Vector3 norm = Vector3Normalize(c);
+        face_centers[fi] = Vector3Scale(norm, sphere_r);
+
+        // Atlas convention: vertex 0 is at local (x=0, y=1) = top of cell.
+        // UV formula: u = 0.5 + x/2,  v = 0.5 + y/2
+        // So T2 = y-axis = toward vertex 0,
+        //    T1 = x-axis = T2 × norm  (right-hand: x = y × z)
+        const Vector3& v0 = sphere->verts[face.verts[0]];
+        Vector3 to_v0 = { v0.x - face_centers[fi].x,
+                           v0.y - face_centers[fi].y,
+                           v0.z - face_centers[fi].z };
+        const float dn = to_v0.x*norm.x + to_v0.y*norm.y + to_v0.z*norm.z;
+        to_v0.x -= dn*norm.x;
+        to_v0.y -= dn*norm.y;
+        to_v0.z -= dn*norm.z;
+        const Vector3 t2 = Vector3Normalize(to_v0);        // local y (toward v0 = atlas V1)
+        const Vector3 t1 = Vector3CrossProduct(t2, norm); // local x
+        face_tan1[fi] = t1;
+        face_tan2[fi] = t2;
+
+        // UV per vertex: project each vertex onto the tangent plane (T1/T2 frame),
+        // UV from atlas formula: u_tile = 0.5 + x/2,  v_tile = 0.5 + y/2
+        // where x = component along T1 (atlas x-axis),
+        //       y = component along T2 (atlas y-axis = toward vertex 0)
+        // Vertex 0 maps to (x=0, y=1) → tile UV (0.5, 1.0) matching atlas V1.
+        // UV computation in double to minimise floating-point error at cell borders.
+        face_uvs[fi].resize(n);
+        const double t1x = t1.x, t1y = t1.y, t1z = t1.z;
+        const double t2x = t2.x, t2y = t2.y, t2z = t2.z;
+        const double nx  = norm.x, ny = norm.y, nz = norm.z;
+        const double cx  = face_centers[fi].x,
+                     cy  = face_centers[fi].y,
+                     cz  = face_centers[fi].z;
+
+        for (int j = 0; j < n; ++j) {
+            const Vector3& v = sphere->verts[face.verts[j]];
+            double dx = (double)v.x - cx;
+            double dy = (double)v.y - cy;
+            double dz = (double)v.z - cz;
+            // Project onto tangent plane
+            const double dn = dx*nx + dy*ny + dz*nz;
+            dx -= dn*nx;  dy -= dn*ny;  dz -= dn*nz;
+            // Local coordinates in T1/T2 frame
+            const double xl = dx*t1x + dy*t1y + dz*t1z;
+            const double yl = dx*t2x + dy*t2y + dz*t2z;
+            const double len = sqrt(xl*xl + yl*yl) + 1e-9;
+            // Atlas: x = -xl (CW vs CCW),  y = -yl (image y-down vs math y-up)
+            face_uvs[fi][j] = { (float)(0.5 - 0.5*xl/len),
+                                 (float)(0.5 - 0.5*yl/len) };
+        }
     }
 }
 

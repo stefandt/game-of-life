@@ -13,7 +13,12 @@
 struct GameWorld {
     // ── Geometry (rebuilt when subdivision changes) ───────────────────────
     std::unique_ptr<HexSphere> sphere;
-    std::vector<Vector3>       face_centers;  // centroids projected onto sphere
+    std::vector<Vector3>       face_centers;   // centroids projected onto sphere
+    std::vector<Vector3>       face_tan1;      // tangent T1 (kept for backface culling)
+    std::vector<Vector3>       face_tan2;      // tangent T2 = normal × T1
+    // Per-face UV: face_uvs[fi][j] is the UV of vertex j within face fi.
+    // Vertex j maps to angle 2π·j/n, so texture is always aligned to polygon shape.
+    std::vector<std::vector<Vector2>> face_uvs;
     float                      sphere_r   = 1.0f;
     int                        hex_count  = 0;
     int                        pent_count = 0;

@@ -9,7 +9,8 @@
 // color is updated immediately when alive changes — renderer reads it directly.
 struct Cell {
     bool  alive = false;
-    Color color = {20, 20, 20, 255};  // dark gray = dead
+    int   age   = 0;    // generations this organism has been alive; reset to 0 on death
+    Color color = {20, 20, 20, 255};
 };
 
 // Game field: parallel to HexSphere::faces.

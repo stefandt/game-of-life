@@ -7,7 +7,8 @@
 // Game settings live in GameConfig and are passed by reference to draw().
 struct SimPanel {
     // ── UI-only state ─────────────────────────────────────────────────────
-    bool is_orbital = false;
+    bool is_orbital   = false;
+    bool use_textures = false;
 
     // ── Action flags — set true when user clicks, main clears them ────────
     bool restart_requested = false;

@@ -48,6 +48,8 @@ add_executable(clang_cmake_app
     src/hexsphere.cpp
     src/game_field.cpp
     src/game_world.cpp
+    src/cell_textures.cpp
+    src/cell_atlas.cpp
     src/raygui_impl.cpp
     src/sim_panel.cpp
 )
@@ -61,7 +63,25 @@ target_include_directories(clang_cmake_app PRIVATE
 )
 target_link_libraries(clang_cmake_app PRIVATE raylib OpenMeshCore OpenMeshTools)
 
+# macOS requires explicit framework linking for RayLib's OpenGL backend
+if(APPLE)
+    target_link_libraries(clang_cmake_app PRIVATE
+        "-framework OpenGL"
+        "-framework Cocoa"
+        "-framework IOKit"
+        "-framework CoreVideo"
+    )
+endif()
+
 set_target_properties(clang_cmake_app PROPERTIES
     OUTPUT_NAME "live"
     DEBUG_POSTFIX "_d"
+)
+
+# Copy res/ folder next to the built executable so LoadTexture can find it
+add_custom_command(TARGET clang_cmake_app POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+        "${CMAKE_SOURCE_DIR}/res"
+        "$<TARGET_FILE_DIR:clang_cmake_app>/res"
+    COMMENT "Copying res/ to build output"
 )

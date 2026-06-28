@@ -3,12 +3,14 @@
 #include "raygui.h"
 #include "game_config.h"
 #include "game_world.h"
+#include "cell_textures.h"
+#include "cell_atlas.h"
 #include "sim_panel.h"
 #include "raymath.h"
 
 int main()
 {
-    SetConfigFlags(FLAG_WINDOW_RESIZABLE);
+    SetConfigFlags(FLAG_WINDOW_RESIZABLE | FLAG_MSAA_4X_HINT);
     InitWindow(1500, 800, "Hex Sphere — Game of Life");
     SetTargetFPS(60);
 
@@ -30,6 +32,12 @@ int main()
 
     float yaw = 0, pitch = 20, distance = 9;
     double last_step = GetTime();
+
+    CellTextures tex;
+    tex.load();       // kept as fallback
+
+    CellAtlas atlas;
+    atlas.load();     // full atlas — single texture for all cells
 
     while (!WindowShouldClose()) {
         // ── Input ─────────────────────────────────────────────────────────
@@ -93,32 +101,108 @@ int main()
         }
         rlMatrixMode(RL_MODELVIEW);
 
+        constexpr float EDGE_LIFT = 1.004f;
+        const int nfaces = (int)world.sphere->faces.size();
+
+        // ── Pass 1: fill cells ────────────────────────────────────────────
         rlEnableBackfaceCulling();
-        for (int fi = 0; fi < (int)world.sphere->faces.size(); ++fi) {
-            const HexFace& face = world.sphere->faces[fi];
-            const int n = (int)face.verts.size();
-            const Vector3& c = world.face_centers[fi];
-            for (int i = 0; i < n; ++i)
-                DrawTriangle3D(c,
-                               world.sphere->verts[face.verts[(i+1)%n]],
-                               world.sphere->verts[face.verts[i]],
-                               world.field->cells[fi].color);
+
+
+
+
+
+        if (panel.use_textures) {
+            // Single atlas bind — one batch for ALL cells, no per-cell switching.
+            // Hex tiles U 0.000–0.500, Pent tiles U 0.500–1.000.
+            // Age selects L1/L2/L3 within the tile.
+            rlBegin(RL_TRIANGLES);
+            rlSetTexture(atlas.texture.id);  // must be AFTER rlBegin
+            for (int fi = 0; fi < nfaces; ++fi) {
+                const HexFace& face = world.sphere->faces[fi];
+                const int      n    = (int)face.verts.size();
+                const Vector3& c    = world.face_centers[fi];
+                const auto&    cell = world.field->cells[fi];
+
+                const LifeLevel lvl = cell.age < 3  ? LifeLevel::L1
+                                    : cell.age < 10 ? LifeLevel::L2
+                                    :                 LifeLevel::L3;
+                const AtlasRect r   = atlas.rect(face.pentagon, cell.alive, lvl);
+                const Color     tnt = cell.alive ? CellAtlas::ALIVE_TINT
+                                                 : CellAtlas::DEAD_TINT;
+                rlColor4ub(tnt.r, tnt.g, tnt.b, tnt.a);
+
+                auto to_atlas = [&](Vector2 luv) -> Vector2 {
+                    return {r.u0 + luv.x * (r.u1 - r.u0), luv.y};
+                };
+
+                for (int i = 0; i < n; ++i) {
+                    const Vector3& va  = world.sphere->verts[face.verts[i]];
+                    const Vector3& vb  = world.sphere->verts[face.verts[(i+1)%n]];
+                    const Vector2  uva = to_atlas(world.face_uvs[fi][i]);
+                    const Vector2  uvb = to_atlas(world.face_uvs[fi][(i+1)%n]);
+                    rlTexCoord2f(r.u0 + 0.5f*(r.u1-r.u0), 0.5f); rlVertex3f(c.x, c.y, c.z);
+                    rlTexCoord2f(uvb.x, uvb.y);                    rlVertex3f(vb.x, vb.y, vb.z);
+                    rlTexCoord2f(uva.x, uva.y);                    rlVertex3f(va.x, va.y, va.z);
+                }
+            }
+            rlEnd();
+            rlSetTexture(0);
+
+        } else {
+            // Solid color from game field
+            for (int fi = 0; fi < nfaces; ++fi) {
+                const HexFace& face = world.sphere->faces[fi];
+                const int      n    = (int)face.verts.size();
+                const Vector3& c    = world.face_centers[fi];
+                const Color    col  = world.field->cells[fi].color;
+                for (int i = 0; i < n; ++i)
+                    DrawTriangle3D(c,
+                                   world.sphere->verts[face.verts[(i+1)%n]],
+                                   world.sphere->verts[face.verts[i]], col);
+            }
         }
+
         rlDisableBackfaceCulling();
 
-        constexpr float EDGE_LIFT = 1.004f;
-        for (int fi = 0; fi < (int)world.sphere->faces.size(); ++fi) {
-            const Vector3& c = world.face_centers[fi];
-            if (Vector3DotProduct(c, Vector3Subtract(c, cam.position)) >= 0.0f)
-                continue;
-            const HexFace& face = world.sphere->faces[fi];
-            const int n = (int)face.verts.size();
-            for (int i = 0; i < n; ++i)
-                DrawLine3D(
-                    Vector3Scale(world.sphere->verts[face.verts[i]], EDGE_LIFT),
-                    Vector3Scale(world.sphere->verts[face.verts[(i+1)%n]], EDGE_LIFT),
-                    {0, 0, 0, 180});
+        // ── Pass 2: edges — white hex, orange pent, front-facing only ─────
+        // Edge color: light (white/orange) when textures are on so borders
+        // are visible; dark when solid-color fill is used (subtle seam).
+        auto draw_edges = [&](bool pent_only) {
+            Color col;
+            if (panel.use_textures)
+                // col = pent_only ? ORANGE : RAYWHITE;
+                col = pent_only ? Color{80, 40, 0, 200} : Color{0, 0, 0, 200};
+            else
+                col = pent_only ? Color{80, 40, 0, 200} : Color{0, 0, 0, 200};
+
+            for (int fi = 0; fi < nfaces; ++fi) {
+                const HexFace& face = world.sphere->faces[fi];
+                if (face.pentagon != pent_only) continue;
+                const Vector3& c = world.face_centers[fi];
+                if (Vector3DotProduct(c, Vector3Subtract(c, cam.position)) >= 0.0f)
+                    continue;
+                const int n = (int)face.verts.size();
+                for (int i = 0; i < n; ++i)
+                    DrawLine3D(
+                        Vector3Scale(world.sphere->verts[face.verts[i]], EDGE_LIFT),
+                        Vector3Scale(world.sphere->verts[face.verts[(i+1)%n]], EDGE_LIFT),
+                        col);
+            }
+        };
+
+        if (!panel.use_textures) {
+            rlEnableSmoothLines();
+            draw_edges(false);
+            draw_edges(true);
+            rlDisableSmoothLines();
+        } else {
+            rlEnableSmoothLines();
+            draw_edges(false);
+            draw_edges(true);
+            rlDisableSmoothLines();
         }
+  
+
         EndMode3D();
 
         // Restore full viewport for 2D overlay and panel
@@ -156,6 +240,8 @@ int main()
         EndDrawing();
     }
 
+    tex.unload();
+    atlas.unload();
     CloseWindow();
     return 0;
 }

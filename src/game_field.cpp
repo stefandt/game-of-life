@@ -27,6 +27,8 @@ void GameField::refresh_color(int idx)
 
 void GameField::set(int idx, bool alive)
 {
+    if (!alive) 
+        cells[idx].age = 0;   // organism dies — reset age
     cells[idx].alive = alive;
     refresh_color(idx);
 }
@@ -72,6 +74,8 @@ void GameField::step()
     const int n = (int)cells.size();
     std::vector<int> live_count(n, 0);
 
+    // Each live cell adds 1 to the counter of each of its neighbors —
+    // so live_count[j] ends up = number of live cells adjacent to cell j.
     for (int i = 0; i < n; ++i) {
         if (!cells[i].alive) continue;
         for (int nb : sphere.faces[i].neighbors)
@@ -81,10 +85,13 @@ void GameField::step()
     std::vector<bool> next(n);
     for (int i = 0; i < n; ++i) {
         const int c = live_count[i];
-        next[i] = cells[i].alive ? (c >= rule_s_lo && c <= rule_s_hi)
-                                 : (c >= rule_b_lo && c <= rule_b_hi);
+        next[i] = cells[i].alive ? (c >= rule_s_lo && c <= rule_s_hi)  // survives
+                                 : (c >= rule_b_lo && c <= rule_b_hi); // born
     }
-    for (int i = 0; i < n; ++i)
+    for (int i = 0; i < n; ++i) {
         if (next[i] != cells[i].alive)
             set(i, next[i]);
+        if (cells[i].alive)
+            ++cells[i].age;   // organism survived another generation
+    }
 }

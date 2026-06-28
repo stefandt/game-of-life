@@ -1,17 +1,23 @@
 [
   {
-    "name": "Clang + VS 2022 BuildTools x64",
+    "name": "Clang + VS 2022 BuildTools x64 (Windows)",
     "compilers": {
       "CXX": "C:/Program Files/LLVM/bin/clang++.exe",
       "C": "C:/Program Files/LLVM/bin/clang.exe"
     },
-    "preferredGenerator": {
-      "name": "Ninja"
-    },
+    "preferredGenerator": { "name": "Ninja" },
     "environmentVariables": {
       "INCLUDE": "C:\\Program Files (x86)\\Microsoft Visual Studio\\2022\\BuildTools\\VC\\Tools\\MSVC\\14.44.35207\\include;C:\\Program Files (x86)\\Microsoft Visual Studio\\2022\\BuildTools\\VC\\Auxiliary\\VS\\include;C:\\Program Files (x86)\\Windows Kits\\10\\include\\10.0.22621.0\\ucrt;C:\\Program Files (x86)\\Windows Kits\\10\\include\\10.0.22621.0\\um;C:\\Program Files (x86)\\Windows Kits\\10\\include\\10.0.22621.0\\shared;C:\\Program Files (x86)\\Windows Kits\\10\\include\\10.0.22621.0\\winrt;C:\\Program Files (x86)\\Windows Kits\\10\\include\\10.0.22621.0\\cppwinrt",
       "LIB": "C:\\Program Files (x86)\\Microsoft Visual Studio\\2022\\BuildTools\\VC\\Tools\\MSVC\\14.44.35207\\lib\\x64;C:\\Program Files (x86)\\Windows Kits\\10\\lib\\10.0.22621.0\\ucrt\\x64;C:\\Program Files (x86)\\Windows Kits\\10\\lib\\10.0.22621.0\\um\\x64",
       "LIBPATH": "C:\\Program Files (x86)\\Microsoft Visual Studio\\2022\\BuildTools\\VC\\Tools\\MSVC\\14.44.35207\\lib\\x64;C:\\Program Files (x86)\\Windows Kits\\10\\UnionMetadata\\10.0.22621.0;C:\\Program Files (x86)\\Windows Kits\\10\\References\\10.0.22621.0"
     }
+  },
+  {
+    "name": "Clang (macOS)",
+    "compilers": {
+      "CXX": "/usr/bin/clang++",
+      "C": "/usr/bin/clang"
+    },
+    "preferredGenerator": { "name": "Ninja" }
   }
 ]

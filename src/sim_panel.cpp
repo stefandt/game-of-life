@@ -5,8 +5,13 @@
 void SimPanel::init()
 {
     Font font = GetFontDefault();
-    if (FileExists("C:/Windows/Fonts/segoeui.ttf"))
+    // Try system fonts in order: Windows → macOS → Linux fallback
+    if      (FileExists("C:/Windows/Fonts/segoeui.ttf"))
         font = LoadFontEx("C:/Windows/Fonts/segoeui.ttf", 20, NULL, 0);
+    else if (FileExists("/Library/Fonts/Arial.ttf"))
+        font = LoadFontEx("/Library/Fonts/Arial.ttf", 20, NULL, 0);
+    else if (FileExists("/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf"))
+        font = LoadFontEx("/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf", 20, NULL, 0);
     GuiSetFont(font);
     GuiSetStyle(DEFAULT, TEXT_SIZE,      20);
     GuiSetStyle(SLIDER,  SLIDER_WIDTH,   16);
@@ -100,6 +105,12 @@ void SimPanel::draw(GameConfig& cfg, Camera3D& cam,
             is_orbital = true;
         }
     }
+    y += ih + sp;
+
+    GuiLine({ix, y, iw, 1}, NULL); y += sp + 4;
+
+    // ── Render mode ───────────────────────────────────────────────────────
+    GuiCheckBox({ix, y, ih, ih}, "  Textures", &use_textures);
     y += ih + sp;
 
     GuiLine({ix, y, iw, 1}, NULL); y += sp + 4;
