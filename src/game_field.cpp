@@ -82,7 +82,7 @@ void GameField::step()
     for (int i = 0; i < n; ++i) {
         const int c = live_count[i];
         next[i] = cells[i].alive ? (c >= rule_s_lo && c <= rule_s_hi)
-                                 : (c == rule_birth);
+                                 : (c >= rule_b_lo && c <= rule_b_hi);
     }
     for (int i = 0; i < n; ++i)
         if (next[i] != cells[i].alive)

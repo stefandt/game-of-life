@@ -28,7 +28,7 @@ void SimPanel::draw(GameConfig& cfg, Camera3D& cam,
     GuiPanel({px, 0, (float)WIDTH, (float)GetScreenHeight()}, "Simulation");
 
     // ── Init / map settings ───────────────────────────────────────────────
-    GuiLabel({ix, y, iw, ih}, "Subdivisions:");
+    GuiLabel({ix, y, iw, ih}, "Subdivisions (Cells):");
     y += ih;
     {
         // ComboBox index 0-3 → Subdiv value 2-5

@@ -44,9 +44,9 @@ void GameWorld::count_alive()
 void GameWorld::apply_rules(const GameConfig& cfg)
 {
     switch (cfg.rules) {
-        case Rules_B2_S23: field->rule_birth=2; field->rule_s_lo=2; field->rule_s_hi=3; break;
-        case Rules_B3_S23: field->rule_birth=3; field->rule_s_lo=2; field->rule_s_hi=3; break;
-        case Rules_B2_S34: field->rule_birth=2; field->rule_s_lo=3; field->rule_s_hi=4; break;
+        case Rules_B2_S23: field->rule_b_lo=2; field->rule_b_hi=2; field->rule_s_lo=2; field->rule_s_hi=3; break;
+        case Rules_B3_S23: field->rule_b_lo=3; field->rule_b_hi=3; field->rule_s_lo=2; field->rule_s_hi=3; break;
+        case Rules_B2_S34: field->rule_b_lo=2; field->rule_b_hi=2; field->rule_s_lo=3; field->rule_s_hi=4; break;
         default: break;
     }
 }

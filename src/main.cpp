@@ -39,6 +39,9 @@ int main()
             last_step = GetTime();
         }
 
+        // Rules sync every frame — cheap (4 int assignments), ensures instant effect
+        world.apply_rules(config);
+
         if (!config.paused && GetTime() - last_step >= 1.0 / config.speed) {
             world.step();
             last_step = GetTime();
@@ -71,8 +74,25 @@ int main()
         BeginDrawing();
         ClearBackground(BLACK);
 
-        // ── 3D ────────────────────────────────────────────────────────────
+        // ── 3D — viewport restricted to area left of panel ────────────────
+        const int view_w = GetScreenWidth() - SimPanel::WIDTH;
+        const int view_h = GetScreenHeight();
+        rlViewport(0, 0, view_w, view_h);
+
         BeginMode3D(cam);
+
+        // BeginMode3D uses full window for aspect ratio — override projection
+        // so the sphere is centered in the 3D area, not the full window.
+        rlMatrixMode(RL_PROJECTION);
+        rlLoadIdentity();
+        {
+            const float aspect = (float)view_w / (float)view_h;
+            const float top    = RL_CULL_DISTANCE_NEAR * tanf(cam.fovy * 0.5f * DEG2RAD);
+            rlFrustum(-top * aspect, top * aspect, -top, top,
+                      RL_CULL_DISTANCE_NEAR, RL_CULL_DISTANCE_FAR);
+        }
+        rlMatrixMode(RL_MODELVIEW);
+
         rlEnableBackfaceCulling();
         for (int fi = 0; fi < (int)world.sphere->faces.size(); ++fi) {
             const HexFace& face = world.sphere->faces[fi];
@@ -100,6 +120,9 @@ int main()
                     {0, 0, 0, 180});
         }
         EndMode3D();
+
+        // Restore full viewport for 2D overlay and panel
+        rlViewport(0, 0, GetScreenWidth(), GetScreenHeight());
 
         // ── Canvas overlay ────────────────────────────────────────────────
         DrawRectangle(0, 0, 240, 62, Fade(BLACK, 0.55f));

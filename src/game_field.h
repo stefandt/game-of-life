@@ -18,10 +18,11 @@ struct GameField {
     const HexSphere&  sphere;
     std::vector<Cell> cells;
 
-    // Rules: born when neighbors == birth; survives when in [s_lo, s_hi]
-    int rule_birth = 2;
-    int rule_s_lo  = 2;
-    int rule_s_hi  = 3;
+    // Rules: born when live neighbors in [b_lo, b_hi]; survives when in [s_lo, s_hi]
+    int rule_b_lo = 2;
+    int rule_b_hi = 2;
+    int rule_s_lo = 2;
+    int rule_s_hi = 3;
 
     explicit GameField(const HexSphere& mesh);
 
