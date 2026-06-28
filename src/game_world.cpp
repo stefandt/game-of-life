@@ -125,3 +125,120 @@ void GameWorld::step()
     ++generation;
     count_alive();
 }
+
+// ── Render mesh ───────────────────────────────────────────────────────────────
+
+static Vector2 atlas_uv(Vector2 luv, const AtlasRect& r,
+                         float u_mgn, float v_mgn, float inset)
+{
+    float u_n = inset + (0.5f + luv.x * 0.5f) * (1.0f - 2.0f * inset);
+    float v_n = inset + (0.5f + luv.y * 0.5f) * (1.0f - 2.0f * inset);
+    return { r.u0 + u_mgn + u_n * (r.u1 - r.u0 - 2.0f * u_mgn),
+             r.v0 + v_mgn + v_n * (r.v1 - r.v0 - 2.0f * v_mgn) };
+}
+
+void GameWorld::fill_render_dynamic(const CellAtlas& atlas)
+{
+    const float u_mgn = 0.5f / (float)atlas.texture.width;
+    const float v_mgn = 0.5f / (float)atlas.texture.height;
+    constexpr float INSET = 0.02f;
+
+    int vi = 0;
+    for (int fi = 0; fi < (int)sphere->faces.size(); ++fi) {
+        const HexFace& face = sphere->faces[fi];
+        const int      n    = (int)face.verts.size();
+        const auto&    cell = field->cells[fi];
+
+        const LifeLevel lvl = cell.age < 3  ? LifeLevel::L1
+                            : cell.age < 10 ? LifeLevel::L2
+                            :                 LifeLevel::L3;
+        const AtlasRect r   = atlas.rect(face.pentagon, cell.alive, lvl);
+        const Color     tnt = cell.alive ? CellAtlas::ALIVE_TINT
+                                         : CellAtlas::DEAD_TINT;
+        const Vector2 uvc = atlas_uv({0.0f, 0.0f}, r, u_mgn, v_mgn, INSET);
+
+        for (int i = 0; i < n; ++i) {
+            const Vector2 uva = atlas_uv(face_uvs[fi][i],       r, u_mgn, v_mgn, INSET);
+            const Vector2 uvb = atlas_uv(face_uvs[fi][(i+1)%n], r, u_mgn, v_mgn, INSET);
+
+            auto write = [&](Vector2 uv) {
+                render_mesh.texcoords[vi*2+0] = uv.x;
+                render_mesh.texcoords[vi*2+1] = uv.y;
+                render_mesh.colors[vi*4+0]    = tnt.r;
+                render_mesh.colors[vi*4+1]    = tnt.g;
+                render_mesh.colors[vi*4+2]    = tnt.b;
+                render_mesh.colors[vi*4+3]    = tnt.a;
+                vi++;
+            };
+            write(uvc);  // center
+            write(uvb);  // vb
+            write(uva);  // va
+        }
+    }
+}
+
+void GameWorld::build_render_mesh(const CellAtlas& atlas)
+{
+    unload_render_mesh();
+
+    int total_verts = 0;
+    for (const auto& face : sphere->faces)
+        total_verts += (int)face.verts.size() * 3;
+
+    render_mesh               = {};
+    render_mesh.vertexCount   = total_verts;
+    render_mesh.triangleCount = total_verts / 3;
+    render_mesh.vertices  = (float*)MemAlloc(total_verts * 3 * sizeof(float));
+    render_mesh.texcoords = (float*)MemAlloc(total_verts * 2 * sizeof(float));
+    render_mesh.colors    = (unsigned char*)MemAlloc(total_verts * 4);
+
+    // Fill static vertex positions (never change after build)
+    int vi = 0;
+    for (int fi = 0; fi < (int)sphere->faces.size(); ++fi) {
+        const HexFace& face = sphere->faces[fi];
+        const int      n    = (int)face.verts.size();
+        const Vector3& c    = face_centers[fi];
+        for (int i = 0; i < n; ++i) {
+            const Vector3& va = sphere->verts[face.verts[i]];
+            const Vector3& vb = sphere->verts[face.verts[(i+1)%n]];
+            auto pos = [&](const Vector3& p) {
+                render_mesh.vertices[vi*3+0] = p.x;
+                render_mesh.vertices[vi*3+1] = p.y;
+                render_mesh.vertices[vi*3+2] = p.z;
+                vi++;
+            };
+            pos(c); pos(vb); pos(va);
+        }
+    }
+
+    fill_render_dynamic(atlas);   // fills texcoords + colors
+    UploadMesh(&render_mesh, true); // true = dynamic (allows UpdateMeshBuffer)
+
+    render_material = LoadMaterialDefault();
+    render_material.maps[MATERIAL_MAP_DIFFUSE].texture = atlas.texture;
+    render_mesh_ready = true;
+}
+
+void GameWorld::update_render_mesh(const CellAtlas& atlas)
+{
+    if (!render_mesh_ready) return;
+    fill_render_dynamic(atlas);
+    // Push only the dynamic buffers (texcoords=1, colors=3)
+    UpdateMeshBuffer(render_mesh, 1, render_mesh.texcoords,
+                     render_mesh.vertexCount * 2 * (int)sizeof(float), 0);
+    UpdateMeshBuffer(render_mesh, 3, render_mesh.colors,
+                     render_mesh.vertexCount * 4, 0);
+}
+
+void GameWorld::unload_render_mesh()
+{
+    if (!render_mesh_ready) return;
+    UnloadMesh(render_mesh);
+    render_mesh = {};
+    // Clear texture ref before UnloadMaterial — otherwise it destroys the
+    // shared atlas texture (UnloadMaterial unloads all non-default map textures).
+    render_material.maps[MATERIAL_MAP_DIFFUSE].texture = {};
+    UnloadMaterial(render_material);
+    render_material = {};
+    render_mesh_ready = false;
+}

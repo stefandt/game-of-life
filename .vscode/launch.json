@@ -12,6 +12,18 @@
             "environment": [],
             "console": "integratedTerminal",
             "preLaunchTask": "CMake: build clang-debug"
+        },
+        {
+            "name": "Release live",
+            "type": "cppvsdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}\\build\\clang-release\\live.exe",
+            "args": [],
+            "stopAtEntry": false,
+            "cwd": "${workspaceFolder}",
+            "environment": [],
+            "console": "integratedTerminal",
+            "preLaunchTask": "CMake: build clang-release"
         }
     ]
 }

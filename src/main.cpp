@@ -34,10 +34,11 @@ int main()
     double last_step = GetTime();
 
     CellTextures tex;
-    tex.load();       // kept as fallback
+    tex.load();
 
     CellAtlas atlas;
-    atlas.load();     // full atlas — single texture for all cells
+    atlas.load();
+    world.build_render_mesh(atlas);  // pre-build once; update only on step()
 
     while (!WindowShouldClose()) {
         // ── Input ─────────────────────────────────────────────────────────
@@ -52,6 +53,7 @@ int main()
 
         if (!config.paused && GetTime() - last_step >= 1.0 / config.speed) {
             world.step();
+            world.update_render_mesh(atlas);  // update GPU buffers after state change
             last_step = GetTime();
         }
 
@@ -101,62 +103,16 @@ int main()
         }
         rlMatrixMode(RL_MODELVIEW);
 
-        constexpr float EDGE_LIFT = 1.004f;
+        constexpr float EDGE_LIFT = 1.001f;
         const int nfaces = (int)world.sphere->faces.size();
 
         // ── Pass 1: fill cells ────────────────────────────────────────────
         rlEnableBackfaceCulling();
 
-
-
-
-
-        if (panel.use_textures) {
-            // Single atlas bind — one batch for ALL cells, no per-cell switching.
-            // Hex tiles U 0.000–0.500, Pent tiles U 0.500–1.000.
-            // Age selects L1/L2/L3 within the tile.
-            rlBegin(RL_TRIANGLES);
-            rlSetTexture(atlas.texture.id);  // must be AFTER rlBegin
-            for (int fi = 0; fi < nfaces; ++fi) {
-                const HexFace& face = world.sphere->faces[fi];
-                const int      n    = (int)face.verts.size();
-                const Vector3& c    = world.face_centers[fi];
-                const auto&    cell = world.field->cells[fi];
-
-                const LifeLevel lvl = cell.age < 3  ? LifeLevel::L1
-                                    : cell.age < 10 ? LifeLevel::L2
-                                    :                 LifeLevel::L3;
-                const AtlasRect r   = atlas.rect(face.pentagon, cell.alive, lvl);
-                const Color     tnt = cell.alive ? CellAtlas::ALIVE_TINT
-                                                 : CellAtlas::DEAD_TINT;
-                rlColor4ub(tnt.r, tnt.g, tnt.b, tnt.a);
-
-                // Half-pixel inset prevents bilinear filter bleeding at tile edges
-                const float u_mgn = 0.5f / (float)atlas.texture.width;
-                const float v_mgn = 0.5f / (float)atlas.texture.height;
-                const float inset = 0.02f;
-
-                // luv in [-1,1]: map to tile [0,1] with content inset, then to atlas
-                auto to_atlas = [&](Vector2 luv) -> Vector2 {
-                    float u_n = inset + (0.5f + luv.x*0.5f) * (1.0f - 2.0f*inset);
-                    float v_n = inset + (0.5f + luv.y*0.5f) * (1.0f - 2.0f*inset);
-                    return { r.u0 + u_mgn + u_n*(r.u1-r.u0-2.0f*u_mgn),
-                             r.v0 + v_mgn + v_n*(r.v1-r.v0-2.0f*v_mgn) };
-                };
-                const Vector2 uvc = to_atlas({0.0f, 0.0f});  // center always (0,0)
-
-                for (int i = 0; i < n; ++i) {
-                    const Vector3& va  = world.sphere->verts[face.verts[i]];
-                    const Vector3& vb  = world.sphere->verts[face.verts[(i+1)%n]];
-                    const Vector2  uva = to_atlas(world.face_uvs[fi][i]);
-                    const Vector2  uvb = to_atlas(world.face_uvs[fi][(i+1)%n]);
-                    rlTexCoord2f(uvc.x, uvc.y);  rlVertex3f(c.x, c.y, c.z);
-                    rlTexCoord2f(uvb.x, uvb.y);  rlVertex3f(vb.x, vb.y, vb.z);
-                    rlTexCoord2f(uva.x, uva.y);  rlVertex3f(va.x, va.y, va.z);
-                }
-            }
-            rlEnd();
-            rlSetTexture(0);
+        if (panel.use_textures && world.render_mesh_ready) {
+            // Pre-built Mesh — single DrawMesh() call, zero per-frame CPU work.
+            // GPU buffers (UV + colors) updated only on step()/restart()/rebuild().
+            DrawMesh(world.render_mesh, world.render_material, MatrixIdentity());
 
         } else {
             // Solid color from game field
@@ -239,17 +195,20 @@ int main()
 
         if (panel.restart_requested) {
             world.restart(config, cam);
+            world.update_render_mesh(atlas);
             last_step = GetTime();
         }
         if (panel.rebuild_requested) {
             world.rebuild(static_cast<int>(config.subdiv));
             world.restart(config, cam);
+            world.build_render_mesh(atlas);   // geometry changed → full rebuild
             last_step = GetTime();
         }
 
         EndDrawing();
     }
 
+    world.unload_render_mesh();
     tex.unload();
     atlas.unload();
     CloseWindow();
