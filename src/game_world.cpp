@@ -1,4 +1,4 @@
-#include "game_world.h"
+﻿#include "game_world.h"
 #include "raymath.h"
 
 void GameWorld::rebuild(int subdiv)
@@ -63,30 +63,15 @@ void GameWorld::recompute_centers()
         // where x = component along T1 (atlas x-axis),
         //       y = component along T2 (atlas y-axis = toward vertex 0)
         // Vertex 0 maps to (x=0, y=1) → tile UV (0.5, 1.0) matching atlas V1.
-        // UV by tangent-plane projection (experimental — compare with index-based above).
-        // Projects each vertex onto the T1/T2 frame and normalises to unit circle.
+        // UV by vertex index: vertex j of n → fixed angle 2π·j/n from top.
+        // Matches atlas convention exactly (V1 at top, CW order).
+        // u = 0.5 + 0.5·sin(a),  v = 0.5 - 0.5·cos(a)
         face_uvs[fi].resize(n);
-        const double t1x = t1.x, t1y = t1.y, t1z = t1.z;
-        const double t2x = t2.x, t2y = t2.y, t2z = t2.z;
-        const double nx  = norm.x, ny = norm.y, nz = norm.z;
-        const double cx  = face_centers[fi].x,
-                     cy  = face_centers[fi].y,
-                     cz  = face_centers[fi].z;
-
+        const float step = 2.0f * PI / (float)n;
         for (int j = 0; j < n; ++j) {
-            const Vector3& v = sphere->verts[face.verts[j]];
-            double dx = (double)v.x - cx;
-            double dy = (double)v.y - cy;
-            double dz = (double)v.z - cz;
-            const double dn = dx*nx + dy*ny + dz*nz;
-            dx -= dn*nx;  dy -= dn*ny;  dz -= dn*nz;
-            const double xl  = dx*t1x + dy*t1y + dz*t1z;
-            const double yl  = dx*t2x + dy*t2y + dz*t2z;
-            const double len = sqrt(xl*xl + yl*yl) + 1e-9;
-            // Store raw [-1,1] atlas coordinates (CW + image-y-down already applied).
-            // to_atlas in the renderer converts these to tile UV with inset.
-            face_uvs[fi][j] = { (float)(-xl/len),   // atlas x ∈ [-1,1]
-                                 (float)(-yl/len) };  // atlas y ∈ [-1,1]
+            const float a = step * j;
+            face_uvs[fi][j] = { 0.5f + 0.5f * sinf(a),
+                                 0.5f - 0.5f * cosf(a) };
         }
     }
 }
