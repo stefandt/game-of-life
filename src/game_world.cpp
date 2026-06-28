@@ -65,13 +65,13 @@ void GameWorld::recompute_centers()
         // Vertex 0 maps to (x=0, y=1) → tile UV (0.5, 1.0) matching atlas V1.
         // UV by vertex index: vertex j of n → fixed angle 2π·j/n from top.
         // Matches atlas convention exactly (V1 at top, CW order).
-        // u = 0.5 + 0.5·sin(a),  v = 0.5 - 0.5·cos(a)
+        // Store in [-1,1] atlas coords so to_atlas can apply inset uniformly.
         face_uvs[fi].resize(n);
         const float step = 2.0f * PI / (float)n;
         for (int j = 0; j < n; ++j) {
             const float a = step * j;
-            face_uvs[fi][j] = { 0.5f + 0.5f * sinf(a),
-                                 0.5f - 0.5f * cosf(a) };
+            face_uvs[fi][j] = {  sinf(a),   // x ∈ [-1,1]
+                                 -cosf(a) }; // y ∈ [-1,1]
         }
     }
 }

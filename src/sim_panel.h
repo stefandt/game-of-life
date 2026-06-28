@@ -8,7 +8,7 @@
 struct SimPanel {
     // ── UI-only state ─────────────────────────────────────────────────────
     bool is_orbital   = false;
-    bool use_textures = false;
+    bool use_textures = true;
 
     // ── Action flags — set true when user clicks, main clears them ────────
     bool restart_requested = false;
