@@ -46,6 +46,7 @@ add_subdirectory(third_party/OpenMesh)
 add_executable(clang_cmake_app
     src/main.cpp
     src/hexsphere.cpp
+    src/game_field.cpp
 )
 
 target_compile_features(clang_cmake_app PRIVATE cxx_std_20)
