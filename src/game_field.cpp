@@ -78,13 +78,11 @@ void GameField::step()
             ++live_count[nb];
     }
 
-    // Rules: B2/S23
-    //   birth:    exactly 2 live neighbors → becomes alive
-    //   survival: 2 or 3 live neighbors   → stays alive
     std::vector<bool> next(n);
     for (int i = 0; i < n; ++i) {
         const int c = live_count[i];
-        next[i] = cells[i].alive ? (c == 2 || c == 3) : (c == 2);
+        next[i] = cells[i].alive ? (c >= rule_s_lo && c <= rule_s_hi)
+                                 : (c == rule_birth);
     }
     for (int i = 0; i < n; ++i)
         if (next[i] != cells[i].alive)

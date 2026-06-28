@@ -18,13 +18,18 @@ struct GameField {
     const HexSphere&  sphere;
     std::vector<Cell> cells;
 
+    // Rules: born when neighbors == birth; survives when in [s_lo, s_hi]
+    int rule_birth = 2;
+    int rule_s_lo  = 2;
+    int rule_s_hi  = 3;
+
     explicit GameField(const HexSphere& mesh);
 
     // Place `count` cells as a connected cluster starting from start_face.
     // start_face = -1 picks randomly.
     void seed(int count = 10, int rng_seed = 42, int start_face = -1);
 
-    // Advance one Game of Life generation (classic Conway rules)
+    // Advance one Game of Life generation using current rules
     void step();
 
     // Set a cell state and update its color immediately

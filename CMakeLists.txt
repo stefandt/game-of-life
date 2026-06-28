@@ -47,12 +47,16 @@ add_executable(clang_cmake_app
     src/main.cpp
     src/hexsphere.cpp
     src/game_field.cpp
+    src/game_world.cpp
+    src/raygui_impl.cpp
+    src/sim_panel.cpp
 )
 
 target_compile_features(clang_cmake_app PRIVATE cxx_std_20)
 target_compile_options(clang_cmake_app PRIVATE -Wall -Wextra -Wpedantic)
 target_include_directories(clang_cmake_app PRIVATE
     src
+    "${CMAKE_SOURCE_DIR}/third_party"
     "${CMAKE_SOURCE_DIR}/third_party/OpenMesh/src"
 )
 target_link_libraries(clang_cmake_app PRIVATE raylib OpenMeshCore OpenMeshTools)
