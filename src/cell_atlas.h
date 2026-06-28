@@ -23,11 +23,10 @@
 // Life level: choose which tile to display for alive cells.
 enum class LifeLevel : int { L1 = 0, L2 = 1, L3 = 2 };
 
-// UV rectangle within the atlas (V always 0.0–1.0).
+// UV rectangle within the atlas.
 struct AtlasRect {
-    float u0, u1;          // horizontal range in [0, 1]
-    static constexpr float v0 = 0.0f;
-    static constexpr float v1 = 1.0f;
+    float u0, u1;              // horizontal tile range
+    float v0 = 0.0f, v1 = 1.0f; // vertical range (always full height)
 };
 
 struct CellAtlas {

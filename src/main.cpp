@@ -131,18 +131,28 @@ int main()
                                                  : CellAtlas::DEAD_TINT;
                 rlColor4ub(tnt.r, tnt.g, tnt.b, tnt.a);
 
+                // Half-pixel inset prevents bilinear filter bleeding at tile edges
+                const float u_mgn = 0.5f / (float)atlas.texture.width;
+                const float v_mgn = 0.5f / (float)atlas.texture.height;
+                const float inset = 0.02f;
+
+                // luv in [-1,1]: map to tile [0,1] with content inset, then to atlas
                 auto to_atlas = [&](Vector2 luv) -> Vector2 {
-                    return {r.u0 + luv.x * (r.u1 - r.u0), luv.y};
+                    float u_n = inset + (0.5f + luv.x*0.5f) * (1.0f - 2.0f*inset);
+                    float v_n = inset + (0.5f + luv.y*0.5f) * (1.0f - 2.0f*inset);
+                    return { r.u0 + u_mgn + u_n*(r.u1-r.u0-2.0f*u_mgn),
+                             r.v0 + v_mgn + v_n*(r.v1-r.v0-2.0f*v_mgn) };
                 };
+                const Vector2 uvc = to_atlas({0.0f, 0.0f});  // center always (0,0)
 
                 for (int i = 0; i < n; ++i) {
                     const Vector3& va  = world.sphere->verts[face.verts[i]];
                     const Vector3& vb  = world.sphere->verts[face.verts[(i+1)%n]];
                     const Vector2  uva = to_atlas(world.face_uvs[fi][i]);
                     const Vector2  uvb = to_atlas(world.face_uvs[fi][(i+1)%n]);
-                    rlTexCoord2f(r.u0 + 0.5f*(r.u1-r.u0), 0.5f); rlVertex3f(c.x, c.y, c.z);
-                    rlTexCoord2f(uvb.x, uvb.y);                    rlVertex3f(vb.x, vb.y, vb.z);
-                    rlTexCoord2f(uva.x, uva.y);                    rlVertex3f(va.x, va.y, va.z);
+                    rlTexCoord2f(uvc.x, uvc.y);  rlVertex3f(c.x, c.y, c.z);
+                    rlTexCoord2f(uvb.x, uvb.y);  rlVertex3f(vb.x, vb.y, vb.z);
+                    rlTexCoord2f(uva.x, uva.y);  rlVertex3f(va.x, va.y, va.z);
                 }
             }
             rlEnd();
