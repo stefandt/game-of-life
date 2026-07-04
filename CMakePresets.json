@@ -16,8 +16,9 @@
       "inherits": "base",
       "binaryDir": "${sourceDir}/build/clang-debug",
       "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Debug"
-      }
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_POLICY_VERSION_MINIMUM": "3.5"
+      }      
     },
     {
       "name": "clang-release",
@@ -25,7 +26,8 @@
       "inherits": "base",
       "binaryDir": "${sourceDir}/build/clang-release",
       "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Release"
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_POLICY_VERSION_MINIMUM": "3.5"
       }
     }
   ],

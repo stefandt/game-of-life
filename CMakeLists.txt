@@ -54,7 +54,8 @@ add_executable(clang_cmake_app
     src/sim_panel.cpp
 )
 
-target_compile_features(clang_cmake_app PRIVATE cxx_std_20)
+# target_compile_features(clang_cmake_app PRIVATE cxx_std_20)
+set_target_properties(clang_cmake_app PROPERTIES  CXX_STANDARD 20  CXX_STANDARD_REQUIRED ON)
 target_compile_options(clang_cmake_app PRIVATE -Wall -Wextra -Wpedantic)
 target_include_directories(clang_cmake_app PRIVATE
     src
