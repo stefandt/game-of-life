@@ -74,7 +74,7 @@ lld-link: error: could not open 'msvcrtd.lib': no such file or directory
 
 ### VS Code IntelliSense and CMake Tools builds
 
-VS Code does not activate `VsDevCmd.bat`. The CMake Tools extension uses the active **cmake kit** to configure the project. The kit defined in `.vscode/cmake-kits.json` explicitly sets the same `INCLUDE`, `LIB`, and `LIBPATH` variables that `VsDevCmd.bat` would set.
+VS Code does not activate `VsDevCmd.bat`. The CMake Tools extension uses the active **cmake kit** to configure the project. The kit defined in `.vscode/cmake-kits.json` explicitly sets the same `INCLUDE`, `LIB`, and `LIBPATH` variables that `VsDevCmd.bat would set.
 
 This ensures that:
 
@@ -84,19 +84,28 @@ This ensures that:
 
 **Selecting the kit in VS Code:**
 
-`Ctrl+Shift+P` → `CMake: Select a Kit` → `Clang + VS 2022 BuildTools x64`
+`Ctrl+Shift+P` → `CMake: Select a Kit` → `Clang + VS <year> <edition> x64`
 
-**When to update `cmake-kits.json`:**
+**Generating `cmake-kits.json` (required on each machine):**
 
-The kit file contains hardcoded paths including the MSVC toolset version (e.g. `14.44.35207`). When Visual Studio Build Tools is updated to a new toolset version, these paths must be regenerated. Run the following in PowerShell to capture the current values:
+`.vscode/cmake-kits.json` is not committed to git — it contains machine-specific paths
+that differ between VS versions and machines. Run once after cloning:
 
 ```powershell
-$vsdev = "C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\Common7\Tools\VsDevCmd.bat"
+.\tools\setup_kits.ps1
+```
+
+The script finds `VsDevCmd.bat`, captures the `INCLUDE`/`LIB`/`LIBPATH` variables it sets,
+and writes a correct kit file for the current machine. Works with VS 2019, 2022, Community,
+Professional, and BuildTools. Equivalent manual steps:
+
+```powershell
+$vsdev  = (Get-ChildItem "${env:ProgramFiles(x86)}\Microsoft Visual Studio" -Filter "VsDevCmd.bat" -Recurse | Select-Object -First 1).FullName
 $output = cmd /c "`"$vsdev`" -arch=x64 -host_arch=x64 >nul 2>&1 && set"
 $output | Select-String '^(INCLUDE|LIB|LIBPATH)='
 ```
 
-Then update `INCLUDE`, `LIB`, and `LIBPATH` in `.vscode/cmake-kits.json`.
+Then select the kit in VS Code: `Ctrl+Shift+P` → `CMake: Select a Kit`.
 
 ### How third-party headers become visible in VS Code
 
