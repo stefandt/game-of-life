@@ -34,8 +34,8 @@ $edition = $parts | Where-Object { $_ -match 'BuildTools|Community|Professional|
 $kitName = "Clang + VS $year $edition x64"
 
 # Find clang++
-$clang = (Get-Command clang++.exe -ErrorAction SilentlyContinue)?.Source
-if (-not $clang) { $clang = "C:/Program Files/LLVM/bin/clang++.exe" }
+$clangCmd = Get-Command clang++.exe -ErrorAction SilentlyContinue
+$clang = if ($clangCmd) { $clangCmd.Source } else { "C:/Program Files/LLVM/bin/clang++.exe" }
 $clangc = $clang -replace 'clang\+\+', 'clang'
 
 $kit = @{
@@ -46,7 +46,8 @@ $kit = @{
 }
 
 $json = ConvertTo-Json @($kit) -Depth 5
-Set-Content ".vscode/cmake-kits.json" $json -Encoding utf8
+$out = Join-Path $PSScriptRoot "..\.vscode\cmake-kits-tmp.json"
+Set-Content $out $json -Encoding utf8
 
-Write-Host "Written: .vscode/cmake-kits.json" -ForegroundColor Green
+Write-Host "Written: .vscode/cmake-kits-tmp.json" -ForegroundColor Green
 Write-Host "Select kit in VS Code: Ctrl+Shift+P → CMake: Select a Kit" -ForegroundColor Cyan
