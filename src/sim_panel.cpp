@@ -7,11 +7,11 @@ void SimPanel::init()
     Font font = GetFontDefault();
     // Try system fonts in order: Windows → macOS → Linux fallback
     if      (FileExists("C:/Windows/Fonts/segoeui.ttf"))
-        font = LoadFontEx("C:/Windows/Fonts/segoeui.ttf", 20, NULL, 0);
+        font = LoadFontEx("C:/Windows/Fonts/segoeui.ttf", 20, nullptr, 0);
     else if (FileExists("/Library/Fonts/Arial.ttf"))
-        font = LoadFontEx("/Library/Fonts/Arial.ttf", 20, NULL, 0);
+        font = LoadFontEx("/Library/Fonts/Arial.ttf", 20, nullptr, 0);
     else if (FileExists("/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf"))
-        font = LoadFontEx("/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf", 20, NULL, 0);
+        font = LoadFontEx("/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf", 20, nullptr, 0);
     GuiSetFont(font);
     GuiSetStyle(DEFAULT, TEXT_SIZE,      20);
     GuiSetStyle(SLIDER,  SLIDER_WIDTH,   16);
@@ -47,7 +47,7 @@ void SimPanel::draw(GameConfig& cfg, Camera3D& cam,
     }
     y += ih + sp;
 
-    GuiLine({ix, y, iw, 1}, NULL); y += sp + 4;
+    GuiLine({ix, y, iw, 1}, nullptr); y += sp + 4;
 
     // ── Status ────────────────────────────────────────────────────────────
     GuiLabel({ix, y, iw, ih},
@@ -91,7 +91,7 @@ void SimPanel::draw(GameConfig& cfg, Camera3D& cam,
         restart_requested = true;
     y += ih + sp;
 
-    GuiLine({ix, y, iw, 1}, NULL); y += sp + 4;
+    GuiLine({ix, y, iw, 1}, nullptr); y += sp + 4;
 
     // ── Camera ────────────────────────────────────────────────────────────
     if (GuiButton({ix, y, iw, ih},
@@ -107,13 +107,13 @@ void SimPanel::draw(GameConfig& cfg, Camera3D& cam,
     }
     y += ih + sp;
 
-    GuiLine({ix, y, iw, 1}, NULL); y += sp + 4;
+    GuiLine({ix, y, iw, 1}, nullptr); y += sp + 4;
 
     // ── Render mode ───────────────────────────────────────────────────────
     GuiCheckBox({ix, y, ih, ih}, "  Textures", &use_textures);
     y += ih + sp;
 
-    GuiLine({ix, y, iw, 1}, NULL); y += sp + 4;
+    GuiLine({ix, y, iw, 1}, nullptr); y += sp + 4;
     GuiLabel({ix, y, iw, ih},
         TextFormat("%d hex   %d pent", hex_count, pent_count));
     y += ih + sp;

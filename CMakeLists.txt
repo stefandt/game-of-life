@@ -15,19 +15,35 @@ project(ClangCMakeApp VERSION 0.1.0 LANGUAGES CXX)
 # )
 # FetchContent_MakeAvailable(raylib)
 
+# RayLib: PLATFORM=Web activates Emscripten/GLES2 backend
+if(EMSCRIPTEN)
+    set(PLATFORM "Web" CACHE STRING "" FORCE)
+    # Emscripten does not support shared libraries; force static globally
+    # so OpenMesh (which respects BUILD_SHARED_LIBS) builds as .a
+    set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
+endif()
+
 set(BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
 add_subdirectory(third_party/raylib)
 
 # -- OpenMesh ------------------------------------------------------------------
 # Clang++ on Windows defines _WIN32 but not WIN32 (no underscores).
 # OpenMesh guards Windows-specific code with #ifdef WIN32, so add it.
-if(WIN32)
+# Not needed for Emscripten (POSIX-like environment).
+if(WIN32 AND NOT EMSCRIPTEN)
     add_compile_definitions(WIN32 _USE_MATH_DEFINES)
 endif()
 
 set(OPENMESH_BUILD_SHARED OFF CACHE BOOL "" FORCE)
 set(OPENMESH_BUILD_APPS   OFF CACHE BOOL "" FORCE)
 set(BUILD_APPS            OFF CACHE BOOL "" FORCE)
+
+# On non-Windows (including Emscripten), OpenMesh's cmake unconditionally builds
+# SHAREDANDSTATIC and ignores OPENMESH_BUILD_SHARED. Emscripten cannot link .so files.
+# Shadow WIN32=TRUE so OpenMesh takes its Windows/static branch during configuration.
+if(EMSCRIPTEN)
+    set(WIN32 TRUE)
+endif()
 
 # FetchContent — для первоначального скачивания (закомментировано после вендоринга)
 # include(FetchContent)
@@ -41,6 +57,9 @@ set(BUILD_APPS            OFF CACHE BOOL "" FORCE)
 # FetchContent_MakeAvailable(openmesh)
 
 add_subdirectory(third_party/OpenMesh)
+if(EMSCRIPTEN)
+    unset(WIN32)
+endif()
 
 # -- Main executable ----------------------------------------------------------
 add_executable(clang_cmake_app
@@ -74,15 +93,29 @@ if(APPLE)
     )
 endif()
 
-set_target_properties(clang_cmake_app PROPERTIES
-    OUTPUT_NAME "live"
-    DEBUG_POSTFIX "_d"
-)
-
-# Copy res/ folder next to the built executable so LoadTexture can find it
-add_custom_command(TARGET clang_cmake_app POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E copy_directory
-        "${CMAKE_SOURCE_DIR}/res"
-        "$<TARGET_FILE_DIR:clang_cmake_app>/res"
-    COMMENT "Copying res/ to build output"
-)
+if(EMSCRIPTEN)
+    # Output as .html; Emscripten generates .html + .js + .wasm bundle
+    set_target_properties(clang_cmake_app PROPERTIES
+        OUTPUT_NAME "live"
+        SUFFIX ".html"
+    )
+    target_link_options(clang_cmake_app PRIVATE
+        "SHELL:--preload-file ${CMAKE_SOURCE_DIR}/res@/res"
+        "SHELL:--shell-file ${CMAKE_SOURCE_DIR}/res/shell.html"
+        -sUSE_GLFW=3
+        -sINITIAL_MEMORY=134217728
+        -sGL_ENABLE_GET_PROC_ADDRESS=1
+    )
+else()
+    set_target_properties(clang_cmake_app PROPERTIES
+        OUTPUT_NAME "live"
+        DEBUG_POSTFIX "_d"
+    )
+    # Copy res/ folder next to the built executable so LoadTexture can find it
+    add_custom_command(TARGET clang_cmake_app POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+            "${CMAKE_SOURCE_DIR}/res"
+            "$<TARGET_FILE_DIR:clang_cmake_app>/res"
+        COMMENT "Copying res/ to build output"
+    )
+endif()

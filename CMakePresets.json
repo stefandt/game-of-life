@@ -18,7 +18,7 @@
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",
         "CMAKE_POLICY_VERSION_MINIMUM": "3.5"
-      }      
+      }
     },
     {
       "name": "clang-release",
@@ -28,6 +28,34 @@
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
         "CMAKE_POLICY_VERSION_MINIMUM": "3.5"
+      }
+    },
+    {
+      "name": "wasm-base",
+      "hidden": true,
+      "generator": "Ninja",
+      "toolchainFile": "$env{EMSDK}/upstream/emscripten/cmake/Modules/Platform/Emscripten.cmake",
+      "cacheVariables": {
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+        "CMAKE_POLICY_VERSION_MINIMUM": "3.5"
+      }
+    },
+    {
+      "name": "wasm-release",
+      "displayName": "Wasm Release",
+      "inherits": "wasm-base",
+      "binaryDir": "${sourceDir}/build/wasm-release",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release"
+      }
+    },
+    {
+      "name": "wasm-debug",
+      "displayName": "Wasm Debug",
+      "inherits": "wasm-base",
+      "binaryDir": "${sourceDir}/build/wasm-debug",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug"
       }
     }
   ],
@@ -39,6 +67,14 @@
     {
       "name": "clang-release",
       "configurePreset": "clang-release"
+    },
+    {
+      "name": "wasm-release",
+      "configurePreset": "wasm-release"
+    },
+    {
+      "name": "wasm-debug",
+      "configurePreset": "wasm-debug"
     }
   ]
 }

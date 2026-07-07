@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Hex Sphere — Game of Life</title>
+  <style>
+    html, body {
+      margin: 0; padding: 0;
+      width: 100%; height: 100%;
+      overflow: hidden;
+      background: black;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    canvas.emscripten {
+      display: block;
+      background: black;
+    }
+  </style>
+</head>
+<body>
+  <canvas class="emscripten" id="canvas"
+          oncontextmenu="event.preventDefault()" tabindex="-1"></canvas>
+  <script>
+    var canvas = document.getElementById('canvas');
+
+    // With FLAG_WINDOW_HIGHDPI + FLAG_WINDOW_RESIZABLE:
+    //   canvas.width  = viewport_css_px * devicePixelRatio  (device pixels, set by RayLib)
+    //   GetScreenWidth() = viewport_css_px                  (CSS pixels, updated by RayLib)
+    // We must set CSS size = canvas.width / DPR so the canvas maps 1:1 to physical pixels
+    // (no browser upscaling or downscaling).
+    // MutationObserver fires when RayLib's resize callback updates the canvas attribute.
+    function fitCanvas() {
+      if (!canvas.width || !canvas.height) return;
+      var dpr = window.devicePixelRatio || 1;
+      canvas.style.width  = Math.round(canvas.width  / dpr) + 'px';
+      canvas.style.height = Math.round(canvas.height / dpr) + 'px';
+    }
+
+    new MutationObserver(fitCanvas)
+      .observe(canvas, { attributes: true, attributeFilter: ['width', 'height'] });
+
+    window.addEventListener('resize', fitCanvas);
+
+    var Module = {
+      canvas: canvas,
+      print: function(text) { console.log(text); }
+    };
+  </script>
+  {{{ SCRIPT }}}
+</body>
+</html>
