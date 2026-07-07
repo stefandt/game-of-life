@@ -13,22 +13,28 @@ void SimPanel::init()
     else if (FileExists("/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf"))
         font = LoadFontEx("/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf", 20, nullptr, 0);
     GuiSetFont(font);
-    GuiSetStyle(DEFAULT, TEXT_SIZE,      20);
-    GuiSetStyle(SLIDER,  SLIDER_WIDTH,   16);
-    GuiSetStyle(SLIDER,  SLIDER_PADDING,  30);
+    // GuiSetStyle(DEFAULT, TEXT_SIZE,      20);
+    // GuiSetStyle(SLIDER,  SLIDER_WIDTH,   16);
+    // GuiSetStyle(SLIDER,  SLIDER_PADDING,  30);
 }
 
 void SimPanel::draw(GameConfig& cfg, Camera3D& cam,
-                    float& dist, float& pitch, float& yaw)
+                    float& dist, float& pitch, float& yaw, float dpr, float panel_width)
 {
     restart_requested = false;
     rebuild_requested = false;
 
-    const float px = (float)(GetScreenWidth() - WIDTH);
-    const float iw = WIDTH - 30;
-    const float ix = px + 15;
-    const float ih = 28, sp = 10;
-    float y = 34;
+    const float px = (float)GetScreenWidth() - panel_width;
+    const float iw = panel_width - (30.0f * dpr);
+    const float ix = px + (15.0f * dpr);
+    const float ih = 28.0f * dpr;
+    const float sp = 10.0f * dpr;
+    float y = 34.0f * dpr;
+
+    // scale style Raygui
+    GuiSetStyle(DEFAULT, TEXT_SIZE, (int)(20.0f * dpr));
+    GuiSetStyle(SLIDER,  SLIDER_WIDTH, (int)(16.0f * dpr));
+    GuiSetStyle(SLIDER,  SLIDER_PADDING, (int)(30.0f * dpr));
 
     GuiPanel({px, 0, (float)WIDTH, (float)GetScreenHeight()}, "Simulation");
 

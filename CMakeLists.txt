@@ -106,6 +106,23 @@ if(EMSCRIPTEN)
         -sINITIAL_MEMORY=134217728
         -sGL_ENABLE_GET_PROC_ADDRESS=1
     )
+
+    # Gather everything needed to host/transfer the app into one folder.
+    # live.wasm/live.data are emcc side-outputs next to the .html (not tracked
+    # as CMake target files), so they're referenced by path directly.
+    set(WASM_DIST_DIR "${CMAKE_SOURCE_DIR}/dist/wasm")
+    add_custom_command(TARGET clang_cmake_app POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E make_directory "${WASM_DIST_DIR}"
+        COMMAND ${CMAKE_COMMAND} -E copy
+            "$<TARGET_FILE_DIR:clang_cmake_app>/live.js"
+            "$<TARGET_FILE_DIR:clang_cmake_app>/live.wasm"
+            "$<TARGET_FILE_DIR:clang_cmake_app>/live.data"
+            "${WASM_DIST_DIR}"
+        COMMAND ${CMAKE_COMMAND} -E copy
+            "$<TARGET_FILE_DIR:clang_cmake_app>/live.html"
+            "${WASM_DIST_DIR}/index.html"
+        COMMENT "Assembling deployable WASM bundle in dist/wasm"
+    )
 else()
     set_target_properties(clang_cmake_app PROPERTIES
         OUTPUT_NAME "live"

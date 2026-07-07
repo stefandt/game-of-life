@@ -29,5 +29,5 @@ struct SimPanel {
     // Draw the panel. cfg is read/written by UI controls.
     // cam/dist/pitch/yaw are modified by the camera toggle button.
     void draw(GameConfig& cfg, Camera3D& cam,
-              float& dist, float& pitch, float& yaw);
+              float& dist, float& pitch, float& yaw, float dpr, float panel_width);
 };

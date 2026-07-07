@@ -19,6 +19,7 @@ struct AppState {
     Camera3D     cam      = {};
     float        yaw = 0, pitch = 20, distance = 9;
     double       last_step = 0;
+    float        dpr = 1.0f;
     CellTextures tex;
     CellAtlas    atlas;
 };
@@ -32,15 +33,20 @@ struct AppState {
 // SetWindowSize(), then reset the CSS display size back to logical pixels —
 // GLFW's web shim scales mouse coordinates by canvas/rect ratio, so clicks
 // still land correctly against GetScreenWidth()/GetMouseX() in this space.
-static void SyncWebCanvasSize()
+static void SyncWebCanvasSize(AppState& s)
 {
     static int last_css_w = -1, last_css_h = -1;
+    static double last_dpr = -1.0;
+
     const int css_w = EM_ASM_INT({ return window.innerWidth;  });
     const int css_h = EM_ASM_INT({ return window.innerHeight; });
-    if (css_w == last_css_w && css_h == last_css_h) return;
-    last_css_w = css_w; last_css_h = css_h;
 
     const double dpr = EM_ASM_DOUBLE({ return window.devicePixelRatio || 1.0; });
+
+    if (css_w == last_css_w && css_h == last_css_h && dpr == last_dpr) return;
+    last_css_w = css_w; last_css_h = css_h; last_dpr = dpr;
+    s.dpr = (float)dpr;
+    
     SetWindowSize((int)(css_w * dpr), (int)(css_h * dpr));
 
     EM_ASM({
@@ -53,7 +59,7 @@ static void SyncWebCanvasSize()
 static void UpdateFrame(AppState& s)
 {
 #ifdef PLATFORM_WEB
-    SyncWebCanvasSize();
+    SyncWebCanvasSize(s);
 #endif
     // ── Input ─────────────────────────────────────────────────────────
     if (IsKeyPressed(KEY_SPACE)) s.config.paused = !s.config.paused;
@@ -70,8 +76,10 @@ static void UpdateFrame(AppState& s)
         s.last_step = GetTime();
     }
 
+    const float actual_panel_width = SimPanel::WIDTH * s.dpr;
+
     // ── Camera ────────────────────────────────────────────────────────
-    const bool mouse_in_panel = GetMouseX() > GetScreenWidth() - SimPanel::WIDTH;
+    const bool mouse_in_panel = GetMouseX() > GetScreenWidth() - actual_panel_width;
 
     if (!s.panel.is_orbital && !mouse_in_panel) {
         if (IsMouseButtonDown(MOUSE_BUTTON_LEFT)) {
@@ -108,8 +116,9 @@ static void UpdateFrame(AppState& s)
     // GetScreenWidth returns logical pixels; GetRenderWidth returns device pixels.
     // On HiDPI/web these differ; using screen coords for GL viewport causes
     // the projection aspect ratio to mismatch the displayed area.
-    const float dpr    = (float)GetRenderWidth() / (float)GetScreenWidth();
-    const int   vp_w   = (int)((GetScreenWidth() - SimPanel::WIDTH) * dpr);
+    //const float dpr    = (float)GetRenderWidth() / (float)GetScreenWidth();
+    //const int   vp_w   = (int)((GetScreenWidth() - SimPanel::WIDTH) * dpr);
+    const int   vp_w   = GetScreenWidth() - (int)actual_panel_width;
     const int   vp_h   = GetRenderHeight();
     rlViewport(0, 0, vp_w, vp_h);
 
@@ -180,14 +189,15 @@ static void UpdateFrame(AppState& s)
     rlViewport(0, 0, GetRenderWidth(), GetRenderHeight());
 
     // ── Canvas overlay ────────────────────────────────────────────────
-    DrawRectangle(0, 0, 240, 62, Fade(BLACK, 0.55f));
+    const int font_size = (int)(20 * s.dpr);
+    DrawRectangle(0, 0, (int)(240 * s.dpr), (int)(62 * s.dpr), Fade(BLACK, 0.55f));
     DrawTextPro(GetFontDefault(),
-        TextFormat("Generation: %d", s.world.generation), {10,10},{0,0},0,20,2,WHITE);
+        TextFormat("Generation: %d", s.world.generation), {10.0f*s.dpr, 10.0f*s.dpr},{0,0},0,font_size,2,WHITE);
     DrawTextPro(GetFontDefault(),
         TextFormat("Alive: %d / %d", s.world.alive_count, s.world.total_cells()),
-        {10,36},{0,0},0,20,2,LIME);
+        {10.0f*s.dpr, 36.0f*s.dpr},{0,0},0,font_size,2,LIME);
     DrawText(TextFormat("%d FPS", GetFPS()),
-             GetScreenWidth() - SimPanel::WIDTH - 70, 10, 20, LIME);
+             GetScreenWidth() - actual_panel_width - (70 * s.dpr), 10 * s.dpr, font_size, LIME);
 
     // ── UI panel ──────────────────────────────────────────────────────
     s.panel.generation  = s.world.generation;
@@ -196,7 +206,7 @@ static void UpdateFrame(AppState& s)
     s.panel.hex_count   = s.world.hex_count;
     s.panel.pent_count  = s.world.pent_count;
 
-    s.panel.draw(s.config, s.cam, s.distance, s.pitch, s.yaw);
+    s.panel.draw(s.config, s.cam, s.distance, s.pitch, s.yaw, s.dpr, actual_panel_width);
 
     if (s.panel.restart_requested) {
         s.world.restart(s.config, s.cam);
@@ -241,6 +251,12 @@ int main()
     SetTargetFPS(60);
 
     static AppState app;
+
+#ifndef PLATFORM_WEB
+    app.dpr = GetWindowScaleDPI().x;
+#endif
+
+
     app.panel.init();
 
     app.cam.position   = {0.0f, 0.0f, 9.0f};
