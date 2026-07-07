@@ -130,7 +130,7 @@ static void UpdateFrame(AppState& s)
     rlLoadIdentity();
     {
         // Aspect ratio in logical coords is identical to render coords (dpr cancels).
-        const float aspect = (float)(GetScreenWidth() - SimPanel::WIDTH) / (float)GetScreenHeight();
+        const float aspect = (float)(GetScreenWidth() - actual_panel_width) / (float)GetScreenHeight();
         const float top    = RL_CULL_DISTANCE_NEAR * tanf(s.cam.fovy * 0.5f * DEG2RAD);
         rlFrustum(-top * aspect, top * aspect, -top, top,
                   RL_CULL_DISTANCE_NEAR, RL_CULL_DISTANCE_FAR);
@@ -248,6 +248,7 @@ int main()
     SetConfigFlags(FLAG_WINDOW_RESIZABLE | FLAG_MSAA_4X_HINT);
     InitWindow(1500, 800, "Hex Sphere — Game of Life");
 #endif
+
     SetTargetFPS(60);
 
     static AppState app;
@@ -255,7 +256,6 @@ int main()
 #ifndef PLATFORM_WEB
     app.dpr = GetWindowScaleDPI().x;
 #endif
-
 
     app.panel.init();
 

@@ -36,7 +36,7 @@ void SimPanel::draw(GameConfig& cfg, Camera3D& cam,
     GuiSetStyle(SLIDER,  SLIDER_WIDTH, (int)(16.0f * dpr));
     GuiSetStyle(SLIDER,  SLIDER_PADDING, (int)(30.0f * dpr));
 
-    GuiPanel({px, 0, (float)WIDTH, (float)GetScreenHeight()}, "Simulation");
+    GuiPanel({px, 0, panel_width, (float)GetScreenHeight()}, "Simulation");
 
     // ── Init / map settings ───────────────────────────────────────────────
     GuiLabel({ix, y, iw, ih}, "Subdivisions (Cells):");
