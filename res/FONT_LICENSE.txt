@@ -1,0 +1,3 @@
+font.ttf = Anonymous Pro Bold, by Mark Simonson (https://fonts.google.com/specimen/Anonymous+Pro)
+Licensed under the SIL Open Font License: https://scripts.sil.org/OFL
+Vendored via raylib's examples/text/resources/anonymous_pro_bold.ttf

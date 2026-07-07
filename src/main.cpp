@@ -1,7 +1,6 @@
 #include "raylib.h"
 #include "rlgl.h"
 #include "raygui.h"
-#include "game_config.h"
 #include "game_world.h"
 #include "cell_textures.h"
 #include "cell_atlas.h"
@@ -14,10 +13,9 @@
 
 struct AppState {
     SimPanel     panel;
-    GameConfig   config;
+    SimControls  controls;
     GameWorld    world;
     Camera3D     cam      = {};
-    float        yaw = 0, pitch = 20, distance = 9;
     double       last_step = 0;
     float        dpr = 1.0f;
     Font         ui_font  = {};
@@ -63,15 +61,15 @@ static void UpdateFrame(AppState& s)
     SyncWebCanvasSize(s);
 #endif
     // ── Input ─────────────────────────────────────────────────────────
-    if (IsKeyPressed(KEY_SPACE)) s.config.paused = !s.config.paused;
+    if (IsKeyPressed(KEY_SPACE)) s.controls.cfg.paused = !s.controls.cfg.paused;
     if (IsKeyPressed(KEY_R)) {
-        s.world.restart(s.config, s.cam);
+        s.world.restart(s.controls.cfg, s.cam);
         s.last_step = GetTime();
     }
 
-    s.world.apply_rules(s.config);
+    s.world.apply_rules(s.controls.cfg);
 
-    if (!s.config.paused && GetTime() - s.last_step >= 1.0 / s.config.speed) {
+    if (!s.controls.cfg.paused && GetTime() - s.last_step >= 1.0 / s.controls.cfg.speed) {
         s.world.step();
         s.world.update_render_mesh(s.atlas);
         s.last_step = GetTime();
@@ -82,13 +80,13 @@ static void UpdateFrame(AppState& s)
     // ── Camera ────────────────────────────────────────────────────────
     const bool mouse_in_panel = GetMouseX() > GetScreenWidth() - actual_panel_width;
 
-    if (!s.panel.is_orbital && !mouse_in_panel) {
+    if (!s.controls.is_orbital && !mouse_in_panel) {
         if (IsMouseButtonDown(MOUSE_BUTTON_LEFT)) {
             Vector2 delta = GetMouseDelta();
-            s.yaw   -= delta.x * 0.3f;
-            s.pitch += delta.y * 0.3f;
-            if (s.pitch > 89.0f)  { s.pitch = 180.0f - s.pitch; s.yaw += 180.0f; }
-            if (s.pitch < -89.0f) { s.pitch = -180.0f - s.pitch; s.yaw += 180.0f; }
+            s.controls.cam_yaw   -= delta.x * 0.3f;
+            s.controls.cam_pitch += delta.y * 0.3f;
+            if (s.controls.cam_pitch > 89.0f)  { s.controls.cam_pitch = 180.0f - s.controls.cam_pitch; s.controls.cam_yaw += 180.0f; }
+            if (s.controls.cam_pitch < -89.0f) { s.controls.cam_pitch = -180.0f - s.controls.cam_pitch; s.controls.cam_yaw += 180.0f; }
         }
         float wheel = GetMouseWheelMove();
         if (wheel != 0.0f) {
@@ -97,14 +95,14 @@ static void UpdateFrame(AppState& s)
 #else
             constexpr float WHEEL_SCALE = 0.5f;
 #endif
-            s.distance = Clamp(s.distance - wheel * WHEEL_SCALE, 4.0f, 20.0f);
+            s.controls.cam_distance = Clamp(s.controls.cam_distance - wheel * WHEEL_SCALE, 4.0f, 20.0f);
         }
     }
-    if (!s.panel.is_orbital) {
-        float yr = s.yaw * DEG2RAD, pr = s.pitch * DEG2RAD;
-        s.cam.position = { s.distance * cosf(pr) * sinf(yr),
-                           s.distance * sinf(pr),
-                           s.distance * cosf(pr) * cosf(yr) };
+    if (!s.controls.is_orbital) {
+        float yr = s.controls.cam_yaw * DEG2RAD, pr = s.controls.cam_pitch * DEG2RAD;
+        s.cam.position = { s.controls.cam_distance * cosf(pr) * sinf(yr),
+                           s.controls.cam_distance * sinf(pr),
+                           s.controls.cam_distance * cosf(pr) * cosf(yr) };
     } else {
         UpdateCamera(&s.cam, CAMERA_ORBITAL);
     }
@@ -144,7 +142,7 @@ static void UpdateFrame(AppState& s)
     // ── Pass 1: fill cells ────────────────────────────────────────────
     rlEnableBackfaceCulling();
 
-    if (s.panel.use_textures && s.world.render_mesh_ready) {
+    if (s.controls.use_textures && s.world.render_mesh_ready) {
         DrawMesh(s.world.render_mesh, s.world.render_material, MatrixIdentity());
     } else {
         for (int fi = 0; fi < nfaces; ++fi) {
@@ -204,22 +202,16 @@ static void UpdateFrame(AppState& s)
         {GetScreenWidth() - actual_panel_width - (70 * s.dpr), 10 * s.dpr}, {0,0}, 0, font_size, 2, LIME);
 
     // ── UI panel ──────────────────────────────────────────────────────
-    s.panel.generation  = s.world.generation;
-    s.panel.alive_count = s.world.alive_count;
-    s.panel.total_cells = s.world.total_cells();
-    s.panel.hex_count   = s.world.hex_count;
-    s.panel.pent_count  = s.world.pent_count;
+    s.panel.draw(s.controls, s.cam, s.world, s.dpr, actual_panel_width);
 
-    s.panel.draw(s.config, s.cam, s.distance, s.pitch, s.yaw, s.dpr, actual_panel_width);
-
-    if (s.panel.restart_requested) {
-        s.world.restart(s.config, s.cam);
+    if (s.controls.restart_requested) {
+        s.world.restart(s.controls.cfg, s.cam);
         s.world.update_render_mesh(s.atlas);
         s.last_step = GetTime();
     }
-    if (s.panel.rebuild_requested) {
-        s.world.rebuild(static_cast<int>(s.config.subdiv));
-        s.world.restart(s.config, s.cam);
+    if (s.controls.rebuild_requested) {
+        s.world.rebuild(static_cast<int>(s.controls.cfg.subdiv));
+        s.world.restart(s.controls.cfg, s.cam);
         s.world.build_render_mesh(s.atlas);
         s.last_step = GetTime();
     }
@@ -278,8 +270,8 @@ int main()
     app.cam.projection = CAMERA_PERSPECTIVE;
     app.last_step      = GetTime();
 
-    app.world.rebuild(static_cast<int>(app.config.subdiv));
-    app.world.restart(app.config, {0.0f, 0.0f, 9.0f});
+    app.world.rebuild(static_cast<int>(app.controls.cfg.subdiv));
+    app.world.restart(app.controls.cfg, {0.0f, 0.0f, 9.0f});
 
     app.tex.load();
     app.atlas.load();

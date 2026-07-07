@@ -1,4 +1,5 @@
 #include "sim_panel.h"
+#include "game_world.h"
 #include "raygui.h"
 #include "raymath.h"
 
@@ -19,11 +20,13 @@ void SimPanel::init(Font font)
     GuiSetFont(font);
 }
 
-void SimPanel::draw(GameConfig& cfg, Camera3D& cam,
-                    float& dist, float& pitch, float& yaw, float dpr, float panel_width)
+void SimPanel::draw(SimControls& controls, const Camera3D& cam, const GameWorld& world,
+                    float dpr, float panel_width)
 {
-    restart_requested = false;
-    rebuild_requested = false;
+    GameConfig& cfg = controls.cfg;
+
+    controls.restart_requested = false;
+    controls.rebuild_requested = false;
 
     const float px = (float)GetScreenWidth() - panel_width;
     const float iw = panel_width - (30.0f * dpr);
@@ -56,7 +59,7 @@ void SimPanel::draw(GameConfig& cfg, Camera3D& cam,
         GuiToggleSlider({ix, y, iw, ih}, "2 (162);3 (642);4 (2562);5 (10242)", &idx);
         if (idx != prev) {
             cfg.subdiv = (Subdiv)(idx + 2);
-            rebuild_requested = true;
+            controls.rebuild_requested = true;
         }
     }
     y += ih + sp;
@@ -102,21 +105,21 @@ void SimPanel::draw(GameConfig& cfg, Camera3D& cam,
     y += ih + sp;
 
     if (GuiButton({ix, y, iw, ih}, "#76# Restart"))
-        restart_requested = true;
+        controls.restart_requested = true;
     y += ih + sp;
 
     GuiLine({ix, y, iw, 1}, nullptr); y += sp + 4;
 
     // ── Camera ────────────────────────────────────────────────────────────
     if (GuiButton({ix, y, iw, ih},
-            is_orbital ? "#65# Mouse Orbit" : "#65# Auto-rotate")) {
-        if (is_orbital) {
-            dist  = Vector3Length(cam.position);
-            pitch = asinf(cam.position.y / dist) * RAD2DEG;
-            yaw   = atan2f(cam.position.x, cam.position.z) * RAD2DEG;
-            is_orbital = false;
+            controls.is_orbital ? "#65# Mouse Orbit" : "#65# Auto-rotate")) {
+        if (controls.is_orbital) {
+            controls.cam_distance = Vector3Length(cam.position);
+            controls.cam_pitch    = asinf(cam.position.y / controls.cam_distance) * RAD2DEG;
+            controls.cam_yaw      = atan2f(cam.position.x, cam.position.z) * RAD2DEG;
+            controls.is_orbital = false;
         } else {
-            is_orbital = true;
+            controls.is_orbital = true;
         }
     }
     y += ih + sp;
@@ -124,13 +127,13 @@ void SimPanel::draw(GameConfig& cfg, Camera3D& cam,
     GuiLine({ix, y, iw, 1}, nullptr); y += sp + 4;
 
     // ── Render mode ───────────────────────────────────────────────────────
-    GuiCheckBox({ix, y, ih, ih}, "  Textures", &use_textures);
+    GuiCheckBox({ix, y, ih, ih}, "  Textures", &controls.use_textures);
     y += ih + sp;
 
     GuiLine({ix, y, iw, 1}, nullptr); y += sp + 4;
     GuiLabel({ix, y, iw, ih},
-        TextFormat("%d hex   %d pent", hex_count, pent_count));
+        TextFormat("%d hex   %d pent", world.hex_count, world.pent_count));
     y += ih + sp;
     GuiLabel({ix, y, iw, ih},
-        TextFormat("Alive: %d / %d", alive_count, total_cells));
+        TextFormat("Alive: %d / %d", world.alive_count, world.total_cells()));
 }
