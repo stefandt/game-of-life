@@ -23,8 +23,38 @@ struct AppState {
     CellAtlas    atlas;
 };
 
+#ifdef PLATFORM_WEB
+// RayLib's web backend sizes the canvas in CSS pixels (FLAG_WINDOW_HIGHDPI is a
+// no-op there — see rcore_web.c), so on any display with devicePixelRatio != 1
+// the browser has to upscale the whole canvas, blurring/aliasing both the 3D
+// scene and the UI. Fix without touching vendored RayLib: keep the canvas
+// backing store at physical-pixel resolution ourselves (CSS size * DPR) via
+// SetWindowSize(), then reset the CSS display size back to logical pixels —
+// GLFW's web shim scales mouse coordinates by canvas/rect ratio, so clicks
+// still land correctly against GetScreenWidth()/GetMouseX() in this space.
+static void SyncWebCanvasSize()
+{
+    static int last_css_w = -1, last_css_h = -1;
+    const int css_w = EM_ASM_INT({ return window.innerWidth;  });
+    const int css_h = EM_ASM_INT({ return window.innerHeight; });
+    if (css_w == last_css_w && css_h == last_css_h) return;
+    last_css_w = css_w; last_css_h = css_h;
+
+    const double dpr = EM_ASM_DOUBLE({ return window.devicePixelRatio || 1.0; });
+    SetWindowSize((int)(css_w * dpr), (int)(css_h * dpr));
+
+    EM_ASM({
+        Module.canvas.style.width  = $0 + 'px';
+        Module.canvas.style.height = $1 + 'px';
+    }, css_w, css_h);
+}
+#endif
+
 static void UpdateFrame(AppState& s)
 {
+#ifdef PLATFORM_WEB
+    SyncWebCanvasSize();
+#endif
     // ── Input ─────────────────────────────────────────────────────────
     if (IsKeyPressed(KEY_SPACE)) s.config.paused = !s.config.paused;
     if (IsKeyPressed(KEY_R)) {
@@ -188,16 +218,22 @@ static AppState* g_app;
 static void WasmFrame() { UpdateFrame(*g_app); }
 #endif
 
+
 int main()
 {
 #ifdef PLATFORM_WEB
-    // HIGHDPI: canvas attribute = viewport * devicePixelRatio (crisp rendering).
-    // RESIZABLE: RayLib updates canvas + GetScreenWidth() via Emscripten callback
-    //            on every browser resize — no CSS/attribute desync.
-    SetConfigFlags(FLAG_MSAA_4X_HINT | FLAG_WINDOW_HIGHDPI | FLAG_WINDOW_RESIZABLE);
-    int initW = EM_ASM_INT({ return window.innerWidth;  });
-    int initH = EM_ASM_INT({ return window.innerHeight; });
-    InitWindow(initW, initH, "Hex Sphere — Game of Life");
+    // No FLAG_WINDOW_RESIZABLE: RayLib's own auto-resize re-sizes the canvas in
+    // CSS pixels, which would fight SyncWebCanvasSize(). Resize is handled
+    // manually every frame instead (see SyncWebCanvasSize / UpdateFrame).
+    SetConfigFlags(FLAG_MSAA_4X_HINT);
+    const int   cssW = EM_ASM_INT({ return window.innerWidth;  });
+    const int   cssH = EM_ASM_INT({ return window.innerHeight; });
+    const double dpr = EM_ASM_DOUBLE({ return window.devicePixelRatio || 1.0; });
+    InitWindow((int)(cssW * dpr), (int)(cssH * dpr), "Hex Sphere — Game of Life");
+    EM_ASM({
+        Module.canvas.style.width  = $0 + 'px';
+        Module.canvas.style.height = $1 + 'px';
+    }, cssW, cssH);
 #else
     SetConfigFlags(FLAG_WINDOW_RESIZABLE | FLAG_MSAA_4X_HINT);
     InitWindow(1500, 800, "Hex Sphere — Game of Life");
