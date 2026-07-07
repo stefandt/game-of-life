@@ -18,7 +18,9 @@ struct AppState {
     Camera3D     cam      = {};
     double       last_step = 0;
     float        dpr = 1.0f;
-    Font         ui_font  = {};
+    Font         ui_font     = {};  // HUD overlay (Generation/Alive/FPS), 16*dpr
+    Font         panel_font  = {};  // panel controls/labels, 16*UI_SCALE*dpr
+    Font         credit_font = {};  // tech-credits line, 11*dpr
     CellTextures tex;
     CellAtlas    atlas;
 };
@@ -255,13 +257,14 @@ int main()
     app.dpr = (float)dpr;
 #endif
 
-    // Font is rasterized at dpr-scaled size up front — GuiSetStyle(TEXT_SIZE)
-    // in SimPanel::draw() only ever scales it down from here, never up, so
-    // glyphs stay crisp instead of being blurrily upscaled from a 20px bitmap.
-    // Loaded independently of raygui so the canvas overlay (below) can reuse
-    // it directly instead of going through GuiGetFont().
-    app.ui_font = LoadUIFont(app.dpr);
-    app.panel.init(app.ui_font);
+    // Each font is rasterized at the exact size it's drawn at (see LoadUIFont)
+    // so raylib's point-filtered atlas is never up/downscaled and glyphs stay
+    // crisp. ui_font is loaded independently of raygui so the canvas overlay
+    // (below) can draw with it directly instead of going through GuiGetFont().
+    app.ui_font     = LoadUIFont(app.dpr, 16.0f);
+    app.panel_font  = LoadUIFont(app.dpr, 16.0f * SimPanel::UI_SCALE);
+    app.credit_font = LoadUIFont(app.dpr, 11.0f);
+    app.panel.init(app.panel_font, app.credit_font);
 
     app.cam.position   = {0.0f, 0.0f, 9.0f};
     app.cam.target     = {0.0f, 0.0f, 0.0f};
@@ -287,11 +290,12 @@ int main()
     app.world.unload_render_mesh();
     app.tex.unload();
     app.atlas.unload();
-    // Only unload if it's the custom font — never unload raylib's built-in
+    // Only unload fonts that are custom — never unload raylib's built-in
     // default font, which LoadUIFont() falls back to and which raylib itself
     // owns for the lifetime of the app.
-    if (app.ui_font.texture.id != GetFontDefault().texture.id)
-        UnloadFont(app.ui_font);
+    for (Font f : { app.ui_font, app.panel_font, app.credit_font })
+        if (f.texture.id != GetFontDefault().texture.id)
+            UnloadFont(f);
     CloseWindow();
 #endif
     return 0;

@@ -3,9 +3,9 @@
 #include "raygui.h"
 #include "raymath.h"
 
-Font LoadUIFont(float dpr)
+Font LoadUIFont(float dpr, float base_size)
 {
-    const int font_size = (int)(16.0f * dpr + 0.5f);
+    const int font_size = (int)(base_size * dpr + 0.5f);
 
     // Bundled in res/ (preloaded into the WASM virtual FS too) so desktop and
     // web render the identical font instead of falling back to raylib's
@@ -15,9 +15,10 @@ Font LoadUIFont(float dpr)
     return GetFontDefault();
 }
 
-void SimPanel::init(Font font)
+void SimPanel::init(Font panel_font, Font credit_font)
 {
-    GuiSetFont(font);
+    GuiSetFont(panel_font);
+    credit_font_ = credit_font;
 }
 
 void SimPanel::draw(SimControls& controls, const Camera3D& cam, const GameWorld& world,
@@ -31,21 +32,22 @@ void SimPanel::draw(SimControls& controls, const Camera3D& cam, const GameWorld&
     const float px = (float)GetScreenWidth() - panel_width;
     const float iw = panel_width - (30.0f * dpr);
     const float ix = px + (15.0f * dpr);
-    const float ih = 28.0f * dpr;
-    const float sp = 10.0f * dpr;
-    float y = 34.0f * dpr;
+    const float ih = 28.0f * UI_SCALE * dpr;
+    const float sp = 10.0f * UI_SCALE * dpr;
+    float y = 34.0f * UI_SCALE * dpr;
 
     // GuiSlider draws its min/max text labels outside the given bounds, to
     // the left and right of the track — inset the track itself so those
     // labels land inside the panel instead of overhanging its edges.
-    const float slider_inset = 26.0f * dpr;
+    const float slider_inset = 26.0f * UI_SCALE * dpr;
     const float sx = ix + slider_inset;
     const float sw = iw - 2.0f * slider_inset;
 
-    // scale style Raygui
-    GuiSetStyle(DEFAULT, TEXT_SIZE, (int)(16.0f * dpr));
-    GuiSetStyle(SLIDER,  SLIDER_WIDTH, (int)(16.0f * dpr));
-    GuiSetStyle(SLIDER,  SLIDER_PADDING, (int)(30.0f * dpr));
+    // scale style Raygui — matches the size panel_font (see init()) was
+    // rasterized at, so glyphs aren't drawn at a different size than loaded.
+    GuiSetStyle(DEFAULT, TEXT_SIZE, (int)(16.0f * UI_SCALE * dpr));
+    GuiSetStyle(SLIDER,  SLIDER_WIDTH, (int)(16.0f * UI_SCALE * dpr));
+    GuiSetStyle(SLIDER,  SLIDER_PADDING, (int)(30.0f * UI_SCALE * dpr));
 
     GuiPanel({px, 0, panel_width, (float)GetScreenHeight()}, "Simulation");
 
@@ -99,6 +101,21 @@ void SimPanel::draw(SimControls& controls, const Camera3D& cam, const GameWorld&
     }
     y += ih + sp;
 
+    // ── Rule explanation — reads world.field's live thresholds directly so
+    // it can never drift out of sync with the rule actually being applied.
+    {
+        const GameField& f = *world.field;
+        if (f.rule_b_lo == f.rule_b_hi)
+            GuiLabel({ix, y, iw, ih}, TextFormat("Born: exactly %d neighbors", f.rule_b_lo));
+        else
+            GuiLabel({ix, y, iw, ih}, TextFormat("Born: %d-%d neighbors", f.rule_b_lo, f.rule_b_hi));
+        y += ih;
+        GuiLabel({ix, y, iw, ih}, TextFormat("Survives: %d-%d neighbors", f.rule_s_lo, f.rule_s_hi));
+        y += ih;
+        GuiLabel({ix, y, iw, ih}, "Dies: otherwise");
+    }
+    y += ih + sp;
+
     // ── Buttons ───────────────────────────────────────────────────────────
     if (GuiButton({ix, y, iw, ih}, cfg.paused ? "#131# Resume" : "#132# Pause"))
         cfg.paused = !cfg.paused;
@@ -136,4 +153,39 @@ void SimPanel::draw(SimControls& controls, const Camera3D& cam, const GameWorld&
     y += ih + sp;
     GuiLabel({ix, y, iw, ih},
         TextFormat("Alive: %d / %d", world.alive_count, world.total_cells()));
+
+    // ── Tech credits ─────────────────────────────────────────────────────
+    // Anchored to the bottom of the screen (not the scrolling 'y' cursor
+    // above) so it stays put regardless of how much control content exists.
+    // Uses credit_font_, rasterized natively at this size — reusing the main
+    // (larger) UI font and drawing it smaller would downscale a point-filtered
+    // atlas and blur the glyphs.
+    {
+#ifdef PLATFORM_WEB
+        static const char* kLines[] = {
+            "C++20",
+            "OpenMesh: geodesic dual mesh",
+            "(icosahedron -> hex/pentagon)",
+            "RayLib: 3D render + GUI",
+            "WASM build via Emscripten",
+        };
+#else
+        static const char* kLines[] = {
+            "C++20",
+            "OpenMesh: geodesic dual mesh",
+            "(icosahedron -> hex/pentagon)",
+            "RayLib: 3D render + GUI",
+        };
+#endif
+        const int   line_count  = sizeof(kLines) / sizeof(kLines[0]);
+        const int   credit_size = (int)(11.0f * dpr + 0.5f);
+        const float line_h      = credit_size + 4.0f * dpr;
+        const Color dim         = Color{150, 150, 150, 255};
+
+        float cy = (float)GetScreenHeight() - line_count * line_h - (10.0f * dpr);
+        for (int i = 0; i < line_count; ++i) {
+            DrawTextEx(credit_font_, kLines[i], {ix, cy}, (float)credit_size, 1.0f, dim);
+            cy += line_h;
+        }
+    }
 }
