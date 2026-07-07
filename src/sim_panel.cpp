@@ -19,6 +19,15 @@ void SimPanel::init(Font panel_font, Font credit_font)
 {
     GuiSetFont(panel_font);
     credit_font_ = credit_font;
+
+    // raygui's default light theme uses mid-gray text (0x686868) on mid-gray
+    // control fills (0xc9c9c9, e.g. buttons/sliders/comboboxes) — contrast
+    // ratio ~3.3:1, reads as "gray on gray". Darken text across all states
+    // so it stands out against both the panel background and control fills.
+    GuiSetStyle(DEFAULT, TEXT_COLOR_NORMAL,   0x1f1f1fff);
+    GuiSetStyle(DEFAULT, TEXT_COLOR_FOCUSED,  0x0f4c68ff);
+    GuiSetStyle(DEFAULT, TEXT_COLOR_PRESSED,  0x043e52ff);
+    GuiSetStyle(DEFAULT, BORDER_COLOR_NORMAL, 0x4d4d4dff);
 }
 
 void SimPanel::draw(SimControls& controls, const Camera3D& cam, const GameWorld& world,
