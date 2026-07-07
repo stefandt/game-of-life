@@ -2,20 +2,21 @@
 #include "raygui.h"
 #include "raymath.h"
 
-void SimPanel::init()
+Font LoadUIFont(float dpr)
 {
-    Font font = GetFontDefault();
-    // Try system fonts in order: Windows → macOS → Linux fallback
-    if      (FileExists("C:/Windows/Fonts/segoeui.ttf"))
-        font = LoadFontEx("C:/Windows/Fonts/segoeui.ttf", 20, nullptr, 0);
-    else if (FileExists("/Library/Fonts/Arial.ttf"))
-        font = LoadFontEx("/Library/Fonts/Arial.ttf", 20, nullptr, 0);
-    else if (FileExists("/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf"))
-        font = LoadFontEx("/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf", 20, nullptr, 0);
+    const int font_size = (int)(16.0f * dpr + 0.5f);
+
+    // Bundled in res/ (preloaded into the WASM virtual FS too) so desktop and
+    // web render the identical font instead of falling back to raylib's
+    // low-res built-in bitmap font when OS system fonts aren't reachable.
+    if (FileExists("res/font.ttf"))
+        return LoadFontEx("res/font.ttf", font_size, nullptr, 0);
+    return GetFontDefault();
+}
+
+void SimPanel::init(Font font)
+{
     GuiSetFont(font);
-    // GuiSetStyle(DEFAULT, TEXT_SIZE,      20);
-    // GuiSetStyle(SLIDER,  SLIDER_WIDTH,   16);
-    // GuiSetStyle(SLIDER,  SLIDER_PADDING,  30);
 }
 
 void SimPanel::draw(GameConfig& cfg, Camera3D& cam,
@@ -31,8 +32,15 @@ void SimPanel::draw(GameConfig& cfg, Camera3D& cam,
     const float sp = 10.0f * dpr;
     float y = 34.0f * dpr;
 
+    // GuiSlider draws its min/max text labels outside the given bounds, to
+    // the left and right of the track — inset the track itself so those
+    // labels land inside the panel instead of overhanging its edges.
+    const float slider_inset = 26.0f * dpr;
+    const float sx = ix + slider_inset;
+    const float sw = iw - 2.0f * slider_inset;
+
     // scale style Raygui
-    GuiSetStyle(DEFAULT, TEXT_SIZE, (int)(20.0f * dpr));
+    GuiSetStyle(DEFAULT, TEXT_SIZE, (int)(16.0f * dpr));
     GuiSetStyle(SLIDER,  SLIDER_WIDTH, (int)(16.0f * dpr));
     GuiSetStyle(SLIDER,  SLIDER_PADDING, (int)(30.0f * dpr));
 
@@ -64,7 +72,7 @@ void SimPanel::draw(GameConfig& cfg, Camera3D& cam,
     GuiLabel({ix, y, iw, ih},
         TextFormat("Speed: %.2f steps/s", cfg.speed));
     y += ih;
-    GuiSlider({ix, y, iw, ih}, "0.25", "8", &cfg.speed, 0.25f, 8.0f);
+    GuiSlider({sx, y, sw, ih}, "0.25", "8", &cfg.speed, 0.25f, 8.0f);
     y += ih + sp;
 
     // ── Initial cells (snap slider) ───────────────────────────────────────
@@ -73,7 +81,7 @@ void SimPanel::draw(GameConfig& cfg, Camera3D& cam,
     y += ih;
     {
         float seed_f = (float)cfg.seed_size;
-        GuiSlider({ix, y, iw, ih}, "10", "2k", &seed_f, 0.0f, 7.0f);
+        GuiSlider({sx, y, sw, ih}, "10", "2k", &seed_f, 0.0f, 7.0f);
         cfg.seed_size = (SeedSize)Clamp((int)(seed_f + 0.5f), 0, 7);
     }
     y += ih + sp;

@@ -20,6 +20,7 @@ struct AppState {
     float        yaw = 0, pitch = 20, distance = 9;
     double       last_step = 0;
     float        dpr = 1.0f;
+    Font         ui_font  = {};
     CellTextures tex;
     CellAtlas    atlas;
 };
@@ -189,15 +190,18 @@ static void UpdateFrame(AppState& s)
     rlViewport(0, 0, GetRenderWidth(), GetRenderHeight());
 
     // ── Canvas overlay ────────────────────────────────────────────────
-    const int font_size = (int)(20 * s.dpr);
+    // Reuses the dpr-sized font.ttf loaded once in main() (s.ui_font), instead
+    // of raylib's low-res built-in bitmap font (GetFontDefault()) which looked
+    // pixelated once scaled up to font_size.
+    const int   font_size = (int)(16 * s.dpr);
     DrawRectangle(0, 0, (int)(240 * s.dpr), (int)(62 * s.dpr), Fade(BLACK, 0.55f));
-    DrawTextPro(GetFontDefault(),
+    DrawTextPro(s.ui_font,
         TextFormat("Generation: %d", s.world.generation), {10.0f*s.dpr, 10.0f*s.dpr},{0,0},0,font_size,2,WHITE);
-    DrawTextPro(GetFontDefault(),
+    DrawTextPro(s.ui_font,
         TextFormat("Alive: %d / %d", s.world.alive_count, s.world.total_cells()),
         {10.0f*s.dpr, 36.0f*s.dpr},{0,0},0,font_size,2,LIME);
-    DrawText(TextFormat("%d FPS", GetFPS()),
-             GetScreenWidth() - actual_panel_width - (70 * s.dpr), 10 * s.dpr, font_size, LIME);
+    DrawTextPro(s.ui_font, TextFormat("%d FPS", GetFPS()),
+        {GetScreenWidth() - actual_panel_width - (70 * s.dpr), 10 * s.dpr}, {0,0}, 0, font_size, 2, LIME);
 
     // ── UI panel ──────────────────────────────────────────────────────
     s.panel.generation  = s.world.generation;
@@ -255,9 +259,17 @@ int main()
 
 #ifndef PLATFORM_WEB
     app.dpr = GetWindowScaleDPI().x;
+#else
+    app.dpr = (float)dpr;
 #endif
 
-    app.panel.init();
+    // Font is rasterized at dpr-scaled size up front — GuiSetStyle(TEXT_SIZE)
+    // in SimPanel::draw() only ever scales it down from here, never up, so
+    // glyphs stay crisp instead of being blurrily upscaled from a 20px bitmap.
+    // Loaded independently of raygui so the canvas overlay (below) can reuse
+    // it directly instead of going through GuiGetFont().
+    app.ui_font = LoadUIFont(app.dpr);
+    app.panel.init(app.ui_font);
 
     app.cam.position   = {0.0f, 0.0f, 9.0f};
     app.cam.target     = {0.0f, 0.0f, 0.0f};
@@ -283,6 +295,11 @@ int main()
     app.world.unload_render_mesh();
     app.tex.unload();
     app.atlas.unload();
+    // Only unload if it's the custom font — never unload raylib's built-in
+    // default font, which LoadUIFont() falls back to and which raylib itself
+    // owns for the lifetime of the app.
+    if (app.ui_font.texture.id != GetFontDefault().texture.id)
+        UnloadFont(app.ui_font);
     CloseWindow();
 #endif
     return 0;
