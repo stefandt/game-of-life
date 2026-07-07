@@ -1,2 +1,8 @@
 build/
-dist/
+/.claude/
+
+# dist/ is intentionally committed: dist/wasm holds the prebuilt WebAssembly
+# bundle that GitLab Pages serves (see .gitlab-ci.yml). Ignore everything else
+# under dist/ that a local build might produce.
+/dist/*
+!/dist/wasm/

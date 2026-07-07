@@ -5,30 +5,270 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Hex Sphere — Game of Life</title>
   <style>
+    :root {
+      --bg:      #0d0f13;
+      --panel:   #12151b;
+      --panel2:  #1a1e26;
+      --line:    #262b34;
+      --text:    #d7dce4;
+      --muted:   #8a93a2;
+      --accent:  #28d250;   /* matches the alive-cell green */
+      --accent2: #1fa840;
+    }
+    * { box-sizing: border-box; }
     html, body {
-      margin: 0; padding: 0;
-      width: 100%; height: 100%;
-      overflow: hidden;
-      background: black;
+      margin: 0; padding: 0; width: 100%; height: 100%;
+      overflow: hidden; background: var(--bg);
+      font-family: system-ui, "Segoe UI", Roboto, sans-serif;
+      color: var(--text);
     }
+    #app { display: flex; width: 100vw; height: 100vh; }
+
+    /* 3D canvas fills all space left of the panel */
     canvas.emscripten {
-      display: block;
-      background: rgb(0, 0, 0);
-      /* image-rendering: -moz-crisp-edges;
-      image-rendering: -webkit-crisp-edges;
-      image-rendering: pixelated;
-      image-rendering: crisp-edges; */
+      flex: 1 1 auto; min-width: 0; height: 100%;
+      display: block; background: #000;
     }
+
+    /* ── Control panel ─────────────────────────────────────────────── */
+    #panel {
+      flex: 0 0 300px; height: 100%; overflow-y: auto;
+      background: var(--panel);
+      border-left: 1px solid var(--line);
+      padding: 16px 16px 20px;
+      display: flex; flex-direction: column; gap: 14px;
+      font-size: 13px;
+    }
+    #panel h1 {
+      margin: 0; font-size: 15px; font-weight: 600; letter-spacing: .2px;
+    }
+    #panel h1 .sub { display: block; color: var(--muted); font-size: 11px; font-weight: 400; margin-top: 2px; }
+
+    .group { display: flex; flex-direction: column; gap: 6px; }
+    .group > label.title { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .5px; }
+    .row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+    .val { color: var(--accent); font-variant-numeric: tabular-nums; }
+
+    hr { border: none; border-top: 1px solid var(--line); margin: 2px 0; }
+
+    input[type=range] { width: 100%; accent-color: var(--accent); }
+    select {
+      width: 100%; padding: 7px 8px; background: var(--panel2);
+      color: var(--text); border: 1px solid var(--line); border-radius: 6px;
+      font-size: 13px;
+    }
+    input[type=checkbox] { accent-color: var(--accent); width: 16px; height: 16px; }
+
+    button {
+      width: 100%; flex: 0 0 auto; padding: 9px 10px; border: 1px solid var(--line);
+      background: var(--panel2); color: var(--text); border-radius: 6px;
+      font-size: 13px; cursor: pointer; transition: background .12s, border-color .12s;
+    }
+    button:hover { background: #232833; border-color: #333a45; }
+    button.primary { background: var(--accent2); border-color: var(--accent2); color: #061a0c; font-weight: 600; }
+    button.primary:hover { background: var(--accent); border-color: var(--accent); }
+    .btnrow { display: flex; gap: 8px; }
+    .btnrow button { flex: 1 1 0; width: auto; }
+
+    .status { font-weight: 600; }
+    .status.running { color: var(--accent); }
+    .status.paused  { color: #e0b23a; }
+
+    .rules-explain { color: var(--muted); font-size: 12px; line-height: 1.5; }
+
+    .stats { display: flex; flex-direction: column; gap: 4px; }
+    .stats .row span:first-child { color: var(--muted); }
+    .stats .row span:last-child  { font-variant-numeric: tabular-nums; }
+
+    .credits { margin-top: auto; color: #5c6472; font-size: 10.5px; line-height: 1.6; }
+    .credits b { color: var(--muted); font-weight: 600; }
   </style>
 </head>
 <body>
-  <canvas class="emscripten" id="canvas"
-          oncontextmenu="event.preventDefault()" tabindex="-1"></canvas>
+  <div id="app">
+    <canvas class="emscripten" id="canvas"
+            oncontextmenu="event.preventDefault()" tabindex="-1"></canvas>
+
+    <aside id="panel">
+      <h1>Hex Sphere
+        <span class="sub">Game of Life on a Goldberg polyhedron</span>
+      </h1>
+
+      <div class="group">
+        <label class="title" for="subdiv">Subdivisions (cells)</label>
+        <select id="subdiv">
+          <option value="2">2 — 162 cells</option>
+          <option value="3">3 — 642 cells</option>
+          <option value="4">4 — 2562 cells</option>
+          <option value="5">5 — 10242 cells</option>
+        </select>
+      </div>
+
+      <hr>
+
+      <div class="row">
+        <span>Status</span>
+        <span id="status" class="status running">Running</span>
+      </div>
+
+      <div class="group">
+        <div class="row"><label class="title" for="speed">Speed</label>
+          <span class="val"><span id="speedval">1.00</span> steps/s</span></div>
+        <input type="range" id="speed" min="0.25" max="8" step="0.05" value="1">
+      </div>
+
+      <div class="group">
+        <div class="row"><label class="title" for="seed">Initial cells</label>
+          <span class="val" id="seedval">10</span></div>
+        <input type="range" id="seed" min="0" max="7" step="1" value="0">
+      </div>
+
+      <div class="group">
+        <label class="title" for="rules">Rules</label>
+        <select id="rules">
+          <option value="0">B2/S23</option>
+          <option value="1">B3/S23 (classic)</option>
+          <option value="2">B2/S34</option>
+        </select>
+        <div class="rules-explain">
+          <div id="ruleBorn">Born: —</div>
+          <div id="ruleSurv">Survives: —</div>
+          <div>Dies: otherwise</div>
+        </div>
+      </div>
+
+      <div class="btnrow">
+        <button id="btnPause">⏸ Pause</button>
+        <button id="btnRestart" class="primary">↻ Restart</button>
+      </div>
+
+      <hr>
+
+      <button id="btnCamera">⟳ Auto-rotate</button>
+
+      <label class="row" style="cursor:pointer">
+        <span>Textured cells</span>
+        <input type="checkbox" id="textures">
+      </label>
+
+      <hr>
+
+      <div class="stats">
+        <div class="row"><span>Generation</span><span id="gen">0</span></div>
+        <div class="row"><span>Alive</span><span id="alive">0 / 0</span></div>
+        <div class="row"><span>Faces</span><span id="cells">— hex · — pent</span></div>
+        <div class="row"><span>Perf</span><span id="fps">— FPS</span></div>
+      </div>
+
+      <div class="credits">
+        <b>C++20</b> · compiled to <b>WebAssembly</b> (Emscripten)<br>
+        <b>OpenMesh</b> — geodesic dual mesh (icosahedron → hex/pentagon)<br>
+        <b>RayLib</b> — 3D rendering (WebGL)
+      </div>
+    </aside>
+  </div>
+
   <script>
+    var canvas = document.getElementById('canvas');
     var Module = {
-      canvas: document.getElementById('canvas'),
+      canvas: canvas,
       print: function(text) { console.log(text); }
     };
+
+    // ── HTML panel ↔ WASM bridge ──────────────────────────────────────
+    // Wires the DOM controls to the extern "C" ui_* functions in main.cpp.
+    // Setters push into SimControls; getters poll SimControls/GameWorld for
+    // the live stats and to reflect state the engine changed itself (e.g. the
+    // Space key toggling pause).
+    (function () {
+      var fn = {}, wrapped = false, wired = false;
+      var $ = function (id) { return document.getElementById(id); };
+
+      function wrap() {
+        var N = 'number';
+        fn.isReady     = Module.cwrap('ui_ready',        N, []);
+        fn.setPaused   = Module.cwrap('ui_set_paused',   null, [N]);
+        fn.setSpeed    = Module.cwrap('ui_set_speed',    null, [N]);
+        fn.setSeedSize = Module.cwrap('ui_set_seed_size',null, [N]);
+        fn.setRules    = Module.cwrap('ui_set_rules',    null, [N]);
+        fn.setSubdiv   = Module.cwrap('ui_set_subdiv',   null, [N]);
+        fn.setOrbital  = Module.cwrap('ui_set_orbital',  null, [N]);
+        fn.setTextures = Module.cwrap('ui_set_textures', null, [N]);
+        fn.restart     = Module.cwrap('ui_restart',      null, []);
+
+        fn.getPaused    = Module.cwrap('ui_get_paused',    N, []);
+        fn.getSpeed     = Module.cwrap('ui_get_speed',     N, []);
+        fn.getSeedSize  = Module.cwrap('ui_get_seed_size', N, []);
+        fn.getSeedCount = Module.cwrap('ui_get_seed_count',N, []);
+        fn.getRules     = Module.cwrap('ui_get_rules',     N, []);
+        fn.getSubdiv    = Module.cwrap('ui_get_subdiv',    N, []);
+        fn.getOrbital   = Module.cwrap('ui_get_orbital',   N, []);
+        fn.getTextures  = Module.cwrap('ui_get_textures',  N, []);
+        fn.getGen       = Module.cwrap('ui_get_generation',N, []);
+        fn.getAlive     = Module.cwrap('ui_get_alive',     N, []);
+        fn.getTotal     = Module.cwrap('ui_get_total',     N, []);
+        fn.getHex       = Module.cwrap('ui_get_hex',       N, []);
+        fn.getPent      = Module.cwrap('ui_get_pent',      N, []);
+        fn.getFps       = Module.cwrap('ui_get_fps',       N, []);
+        fn.rbLo = Module.cwrap('ui_get_rule_b_lo', N, []);
+        fn.rbHi = Module.cwrap('ui_get_rule_b_hi', N, []);
+        fn.rsLo = Module.cwrap('ui_get_rule_s_lo', N, []);
+        fn.rsHi = Module.cwrap('ui_get_rule_s_hi', N, []);
+      }
+
+      function initControls() {
+        // Seed control values from the engine's current defaults.
+        $('speed').value    = fn.getSpeed();
+        $('seed').value     = fn.getSeedSize();
+        $('rules').value    = fn.getRules();
+        $('subdiv').value   = fn.getSubdiv();
+        $('textures').checked = !!fn.getTextures();
+
+        $('subdiv').addEventListener('change', function () { fn.setSubdiv(parseInt(this.value, 10)); });
+        $('speed').addEventListener('input',  function () { fn.setSpeed(parseFloat(this.value)); });
+        $('seed').addEventListener('input',   function () { fn.setSeedSize(parseInt(this.value, 10)); });
+        $('rules').addEventListener('change', function () { fn.setRules(parseInt(this.value, 10)); });
+        $('textures').addEventListener('change', function () { fn.setTextures(this.checked ? 1 : 0); });
+        $('btnPause').addEventListener('click',   function () { fn.setPaused(fn.getPaused() ? 0 : 1); });
+        $('btnRestart').addEventListener('click', function () { fn.restart(); });
+        $('btnCamera').addEventListener('click',  function () { fn.setOrbital(fn.getOrbital() ? 0 : 1); });
+      }
+
+      function poll() {
+        // Wait until the wasm runtime exposes cwrap...
+        if (!wrapped) {
+          if (typeof Module === 'undefined' || typeof Module.cwrap !== 'function') return;
+          wrap();
+          wrapped = true;
+        }
+        // ...and until main() has created g_app (getters dereference it).
+        if (!fn.isReady()) return;
+        if (!wired) { initControls(); wired = true; }
+
+        // Live stats.
+        $('gen').textContent   = fn.getGen();
+        $('alive').textContent = fn.getAlive() + ' / ' + fn.getTotal();
+        $('cells').textContent = fn.getHex() + ' hex · ' + fn.getPent() + ' pent';
+        $('fps').textContent   = fn.getFps() + ' FPS';
+        $('speedval').textContent = fn.getSpeed().toFixed(2);
+        $('seedval').textContent  = fn.getSeedCount();
+
+        // Rule explanation, straight from the live thresholds.
+        var bLo = fn.rbLo(), bHi = fn.rbHi();
+        $('ruleBorn').textContent = 'Born: ' +
+          (bLo === bHi ? ('exactly ' + bLo) : (bLo + '–' + bHi)) + ' neighbors';
+        $('ruleSurv').textContent = 'Survives: ' + fn.rsLo() + '–' + fn.rsHi() + ' neighbors';
+
+        // Reflect state the engine may have changed itself (keyboard, toggles).
+        var paused = fn.getPaused();
+        $('btnPause').textContent = paused ? '▶ Resume' : '⏸ Pause';
+        $('status').textContent = paused ? 'Paused' : 'Running';
+        $('status').className = 'status ' + (paused ? 'paused' : 'running');
+        $('btnCamera').textContent = fn.getOrbital() ? '◉ Mouse Orbit' : '⟳ Auto-rotate';
+      }
+
+      setInterval(poll, 150);
+    })();
   </script>
   {{{ SCRIPT }}}
 </body>

@@ -105,6 +105,9 @@ if(EMSCRIPTEN)
         -sUSE_GLFW=3
         -sINITIAL_MEMORY=134217728
         -sGL_ENABLE_GET_PROC_ADDRESS=1
+        # Expose ccall/cwrap so the HTML/JS panel can call the extern "C"
+        # ui_* bridge functions (kept alive via EMSCRIPTEN_KEEPALIVE in main.cpp).
+        -sEXPORTED_RUNTIME_METHODS=ccall,cwrap
     )
 
     # Gather everything needed to host/transfer the app into one folder.

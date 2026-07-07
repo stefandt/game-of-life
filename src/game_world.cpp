@@ -1,6 +1,8 @@
 ﻿#include "game_world.h"
 #include "raymath.h"
 
+#include <random>
+
 void GameWorld::rebuild(int subdiv)
 {
     field.reset();
@@ -114,7 +116,10 @@ int GameWorld::front_face(const Camera3D& cam) const
 void GameWorld::restart(const GameConfig& cfg, const Camera3D& cam)
 {
     apply_rules(cfg);
-    field->seed(cfg.seed_count(), 42, front_face(cam));
+    // Fresh entropy each restart so the initial pattern differs every time.
+    // std::random_device works on desktop and under Emscripten (crypto-backed).
+    static std::random_device rd;
+    field->seed(cfg.seed_count(), (int)rd(), front_face(cam));
     generation = 0;
     count_alive();
 }

@@ -26,34 +26,30 @@ struct AppState {
 };
 
 #ifdef PLATFORM_WEB
-// RayLib's web backend sizes the canvas in CSS pixels (FLAG_WINDOW_HIGHDPI is a
-// no-op there — see rcore_web.c), so on any display with devicePixelRatio != 1
-// the browser has to upscale the whole canvas, blurring/aliasing both the 3D
-// scene and the UI. Fix without touching vendored RayLib: keep the canvas
-// backing store at physical-pixel resolution ourselves (CSS size * DPR) via
-// SetWindowSize(), then reset the CSS display size back to logical pixels —
-// GLFW's web shim scales mouse coordinates by canvas/rect ratio, so clicks
-// still land correctly against GetScreenWidth()/GetMouseX() in this space.
+// The canvas' on-screen (CSS) size is decided by the page layout — it flexes to
+// fill the area left of the HTML control panel (see shell.html). Here we only
+// keep the canvas backing store at physical-pixel resolution (CSS size * DPR)
+// via SetWindowSize(), so RayLib renders crisp on HiDPI displays without the
+// browser up/downscaling. We do NOT touch canvas.style — layout owns that.
+// RayLib's FLAG_WINDOW_HIGHDPI is a no-op on web (see rcore_web.c), so this is
+// how HiDPI is handled; GLFW's web shim scales mouse coords by the canvas/rect
+// ratio, so input still lands correctly in GetScreenWidth()/GetMouseX() space.
 static void SyncWebCanvasSize(AppState& s)
 {
     static int last_css_w = -1, last_css_h = -1;
     static double last_dpr = -1.0;
 
-    const int css_w = EM_ASM_INT({ return window.innerWidth;  });
-    const int css_h = EM_ASM_INT({ return window.innerHeight; });
+    // clientWidth/Height = the canvas' laid-out CSS box (flex area).
+    const int css_w = EM_ASM_INT({ return Module.canvas.clientWidth  || window.innerWidth;  });
+    const int css_h = EM_ASM_INT({ return Module.canvas.clientHeight || window.innerHeight; });
 
     const double dpr = EM_ASM_DOUBLE({ return window.devicePixelRatio || 1.0; });
 
     if (css_w == last_css_w && css_h == last_css_h && dpr == last_dpr) return;
     last_css_w = css_w; last_css_h = css_h; last_dpr = dpr;
     s.dpr = (float)dpr;
-    
-    SetWindowSize((int)(css_w * dpr), (int)(css_h * dpr));
 
-    EM_ASM({
-        Module.canvas.style.width  = $0 + 'px';
-        Module.canvas.style.height = $1 + 'px';
-    }, css_w, css_h);
+    SetWindowSize((int)(css_w * dpr), (int)(css_h * dpr));
 }
 #endif
 
@@ -77,10 +73,30 @@ static void UpdateFrame(AppState& s)
         s.last_step = GetTime();
     }
 
+#ifdef PLATFORM_WEB
+    // Web builds render only the 3D scene into the canvas; all controls and
+    // stats live in the HTML panel beside it (see shell.html + the extern "C"
+    // bridge below). So the canvas has no in-scene panel and no reserved width.
+    const float actual_panel_width = 0.0f;
+#else
     const float actual_panel_width = SimPanel::WIDTH * s.dpr;
+#endif
 
     // ── Camera ────────────────────────────────────────────────────────
     const bool mouse_in_panel = GetMouseX() > GetScreenWidth() - actual_panel_width;
+
+    // In auto-rotate, dragging on the 3D area drops into manual control,
+    // resuming from the current orientation so the view doesn't jump.
+    if (s.controls.is_orbital && !mouse_in_panel &&
+        IsMouseButtonDown(MOUSE_BUTTON_LEFT)) {
+        Vector2 d = GetMouseDelta();
+        if (d.x != 0.0f || d.y != 0.0f) {
+            s.controls.cam_distance = Vector3Length(s.cam.position);
+            s.controls.cam_pitch    = asinf(s.cam.position.y / s.controls.cam_distance) * RAD2DEG;
+            s.controls.cam_yaw      = atan2f(s.cam.position.x, s.cam.position.z) * RAD2DEG;
+            s.controls.is_orbital   = false;
+        }
+    }
 
     if (!s.controls.is_orbital && !mouse_in_panel) {
         if (IsMouseButtonDown(MOUSE_BUTTON_LEFT)) {
@@ -189,10 +205,10 @@ static void UpdateFrame(AppState& s)
     // Restore full viewport for 2D overlay and panel
     rlViewport(0, 0, GetRenderWidth(), GetRenderHeight());
 
-    // ── Canvas overlay ────────────────────────────────────────────────
-    // Reuses the dpr-sized font.ttf loaded once in main() (s.ui_font), instead
-    // of raylib's low-res built-in bitmap font (GetFontDefault()) which looked
-    // pixelated once scaled up to font_size.
+    // ── Canvas overlay (both platforms) ───────────────────────────────
+    // On-scene HUD drawn over the canvas. On web the HTML panel duplicates
+    // these stats; this overlay stays so the scene keeps its own counters.
+    // Reuses the dpr-sized font.ttf loaded once in main().
     const int   font_size = (int)(16 * s.dpr);
     DrawRectangle(0, 0, (int)(240 * s.dpr), (int)(62 * s.dpr), Fade(BLACK, 0.55f));
     DrawTextPro(s.ui_font,
@@ -203,19 +219,28 @@ static void UpdateFrame(AppState& s)
     DrawTextPro(s.ui_font, TextFormat("%d FPS", GetFPS()),
         {GetScreenWidth() - actual_panel_width - (70 * s.dpr), 10 * s.dpr}, {0,0}, 0, font_size, 2, LIME);
 
-    // ── UI panel ──────────────────────────────────────────────────────
+#ifndef PLATFORM_WEB
+    // ── UI panel (native only; web uses the HTML panel in shell.html) ──
     s.panel.draw(s.controls, s.cam, s.world, s.dpr, actual_panel_width);
+#endif
 
+    // Clear the flags after handling so a one-shot request runs exactly once.
+    // The native raygui panel resets them at the top of its draw(); the web
+    // JS panel does not, so we must clear them here for both — otherwise a JS
+    // request stays true and re-fires every frame (e.g. restart reseeding from
+    // front_face(cam) each frame, making cells jump as the camera rotates).
     if (s.controls.restart_requested) {
         s.world.restart(s.controls.cfg, s.cam);
         s.world.update_render_mesh(s.atlas);
         s.last_step = GetTime();
+        s.controls.restart_requested = false;
     }
     if (s.controls.rebuild_requested) {
         s.world.rebuild(static_cast<int>(s.controls.cfg.subdiv));
         s.world.restart(s.controls.cfg, s.cam);
         s.world.build_render_mesh(s.atlas);
         s.last_step = GetTime();
+        s.controls.rebuild_requested = false;
     }
 
     EndDrawing();
@@ -224,6 +249,69 @@ static void UpdateFrame(AppState& s)
 #ifdef PLATFORM_WEB
 static AppState* g_app;
 static void WasmFrame() { UpdateFrame(*g_app); }
+
+// ── JS ↔ engine bridge ────────────────────────────────────────────────────
+// The HTML/JS panel (shell.html) reads and writes ONLY these functions, which
+// forward to g_app->controls (UI-writable state) and g_app->world (read-only
+// derived state). The engine itself never knows a JS panel exists — this is the
+// same SimControls boundary the native raygui panel uses, exposed to the web.
+extern "C" {
+
+// True once main() has created g_app; the JS panel waits for this before
+// calling any other getter/setter (they dereference g_app). Safe to call
+// early — it only null-checks, never dereferences.
+EMSCRIPTEN_KEEPALIVE int ui_ready() { return g_app != nullptr ? 1 : 0; }
+
+// — Setters: UI → controls —
+EMSCRIPTEN_KEEPALIVE void ui_set_paused(int v)    { g_app->controls.cfg.paused = (v != 0); }
+EMSCRIPTEN_KEEPALIVE void ui_set_speed(float v)   { g_app->controls.cfg.speed = v; }
+EMSCRIPTEN_KEEPALIVE void ui_set_seed_size(int v) { g_app->controls.cfg.seed_size = (SeedSize)v; }
+EMSCRIPTEN_KEEPALIVE void ui_set_rules(int v)     { g_app->controls.cfg.rules = (Rules)v; }
+EMSCRIPTEN_KEEPALIVE void ui_set_textures(int v)  { g_app->controls.use_textures = (v != 0); }
+EMSCRIPTEN_KEEPALIVE void ui_restart()            { g_app->controls.restart_requested = true; }
+
+EMSCRIPTEN_KEEPALIVE void ui_set_subdiv(int v) {
+    g_app->controls.cfg.subdiv = (Subdiv)v;
+    g_app->controls.rebuild_requested = true;
+}
+
+// Mirrors SimPanel's camera toggle: when leaving orbital mode, capture the
+// current orientation back into controls so manual control resumes smoothly.
+EMSCRIPTEN_KEEPALIVE void ui_set_orbital(int v) {
+    SimControls& c = g_app->controls;
+    const bool want = (v != 0);
+    if (c.is_orbital && !want) {
+        c.cam_distance = Vector3Length(g_app->cam.position);
+        c.cam_pitch    = asinf(g_app->cam.position.y / c.cam_distance) * RAD2DEG;
+        c.cam_yaw      = atan2f(g_app->cam.position.x, g_app->cam.position.z) * RAD2DEG;
+    }
+    c.is_orbital = want;
+}
+
+// — Getters: controls / world → UI —
+EMSCRIPTEN_KEEPALIVE int   ui_get_paused()     { return g_app->controls.cfg.paused ? 1 : 0; }
+EMSCRIPTEN_KEEPALIVE float ui_get_speed()      { return g_app->controls.cfg.speed; }
+EMSCRIPTEN_KEEPALIVE int   ui_get_seed_size()  { return (int)g_app->controls.cfg.seed_size; }
+EMSCRIPTEN_KEEPALIVE int   ui_get_seed_count() { return g_app->controls.cfg.seed_count(); }
+EMSCRIPTEN_KEEPALIVE int   ui_get_rules()      { return (int)g_app->controls.cfg.rules; }
+EMSCRIPTEN_KEEPALIVE int   ui_get_subdiv()     { return (int)g_app->controls.cfg.subdiv; }
+EMSCRIPTEN_KEEPALIVE int   ui_get_orbital()    { return g_app->controls.is_orbital ? 1 : 0; }
+EMSCRIPTEN_KEEPALIVE int   ui_get_textures()   { return g_app->controls.use_textures ? 1 : 0; }
+
+EMSCRIPTEN_KEEPALIVE int ui_get_generation() { return g_app->world.generation; }
+EMSCRIPTEN_KEEPALIVE int ui_get_alive()      { return g_app->world.alive_count; }
+EMSCRIPTEN_KEEPALIVE int ui_get_total()      { return g_app->world.total_cells(); }
+EMSCRIPTEN_KEEPALIVE int ui_get_hex()        { return g_app->world.hex_count; }
+EMSCRIPTEN_KEEPALIVE int ui_get_pent()       { return g_app->world.pent_count; }
+EMSCRIPTEN_KEEPALIVE int ui_get_fps()        { return GetFPS(); }
+
+// Live rule thresholds (for the "Born / Survives" explanation text).
+EMSCRIPTEN_KEEPALIVE int ui_get_rule_b_lo() { return g_app->world.field->rule_b_lo; }
+EMSCRIPTEN_KEEPALIVE int ui_get_rule_b_hi() { return g_app->world.field->rule_b_hi; }
+EMSCRIPTEN_KEEPALIVE int ui_get_rule_s_lo() { return g_app->world.field->rule_s_lo; }
+EMSCRIPTEN_KEEPALIVE int ui_get_rule_s_hi() { return g_app->world.field->rule_s_hi; }
+
+} // extern "C"
 #endif
 
 
@@ -234,14 +322,12 @@ int main()
     // CSS pixels, which would fight SyncWebCanvasSize(). Resize is handled
     // manually every frame instead (see SyncWebCanvasSize / UpdateFrame).
     SetConfigFlags(FLAG_MSAA_4X_HINT);
-    const int   cssW = EM_ASM_INT({ return window.innerWidth;  });
-    const int   cssH = EM_ASM_INT({ return window.innerHeight; });
+    // Size the backing store from the canvas' laid-out CSS box (flex area beside
+    // the HTML panel); SyncWebCanvasSize keeps it in sync every frame after.
+    const int   cssW = EM_ASM_INT({ return Module.canvas.clientWidth  || window.innerWidth;  });
+    const int   cssH = EM_ASM_INT({ return Module.canvas.clientHeight || window.innerHeight; });
     const double dpr = EM_ASM_DOUBLE({ return window.devicePixelRatio || 1.0; });
     InitWindow((int)(cssW * dpr), (int)(cssH * dpr), "Hex Sphere — Game of Life");
-    EM_ASM({
-        Module.canvas.style.width  = $0 + 'px';
-        Module.canvas.style.height = $1 + 'px';
-    }, cssW, cssH);
 #else
     SetConfigFlags(FLAG_WINDOW_RESIZABLE | FLAG_MSAA_4X_HINT);
     InitWindow(1500, 800, "Hex Sphere — Game of Life");
