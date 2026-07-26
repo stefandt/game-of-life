@@ -1,4 +1,4 @@
-name: Deploy WebAssembly App to GitHub Pages
+name: Deploy WebAssembly Game
 
 on:
   push:
@@ -30,9 +30,9 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          # ВАЖЛИВО: Тут вказуємо шлях до вашої папки!
-          path: './dist/wasm'
-          # Якщо папка називається master/dist/wasm, змініть на: './master/dist/wasm'
+          # ВАЖЛИВО: вкажіть тут папку, куди компілюється ваша гра (разом з index.html)
+          # Зазвичай це './dist' або './public'
+          path: './dist' 
 
       - name: Deploy to GitHub Pages
         id: deployment
