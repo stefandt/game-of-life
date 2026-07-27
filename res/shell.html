@@ -234,37 +234,51 @@
         $('btnCamera').addEventListener('click',  function () { fn.setOrbital(fn.getOrbital() ? 0 : 1); });
       }
 
+      // Ready when cwrap exists AND the actual _ui_ready export is present —
+      // checking the export directly avoids the race where cwrap appears before
+      // the wasm exports do (which threw "is not a function" ~half the time).
+      // (Module.calledRun is unusable here: emscripten_set_main_loop's unwind
+      // keeps it from ever being set.) ui_ready() itself then reports whether
+      // main() has created g_app before any other getter dereferences it.
+      function runtimeReady() {
+        return typeof Module !== 'undefined' &&
+               typeof Module.cwrap === 'function' &&
+               typeof Module._ui_ready === 'function';
+      }
+
       function poll() {
-        // Wait until the wasm runtime exposes cwrap...
         if (!wrapped) {
-          if (typeof Module === 'undefined' || typeof Module.cwrap !== 'function') return;
-          wrap();
+          if (!runtimeReady()) return;
+          try { wrap(); } catch (e) { return; }   // exports not up yet — retry
           wrapped = true;
         }
-        // ...and until main() has created g_app (getters dereference it).
-        if (!fn.isReady()) return;
-        if (!wired) { initControls(); wired = true; }
 
-        // Live stats.
-        $('gen').textContent   = fn.getGen();
-        $('alive').textContent = fn.getAlive() + ' / ' + fn.getTotal();
-        $('cells').textContent = fn.getHex() + ' hex · ' + fn.getPent() + ' pent';
-        $('fps').textContent   = fn.getFps() + ' FPS';
-        $('speedval').textContent = fn.getSpeed().toFixed(2);
-        $('seedval').textContent  = fn.getSeedCount();
+        // Wrap the body defensively so a transient never breaks the panel.
+        try {
+          if (!fn.isReady()) return;   // main() hasn't created g_app yet
+          if (!wired) { initControls(); wired = true; }
 
-        // Rule explanation, straight from the live thresholds.
-        var bLo = fn.rbLo(), bHi = fn.rbHi();
-        $('ruleBorn').textContent = 'Born: ' +
-          (bLo === bHi ? ('exactly ' + bLo) : (bLo + '–' + bHi)) + ' neighbors';
-        $('ruleSurv').textContent = 'Survives: ' + fn.rsLo() + '–' + fn.rsHi() + ' neighbors';
+          // Live stats.
+          $('gen').textContent   = fn.getGen();
+          $('alive').textContent = fn.getAlive() + ' / ' + fn.getTotal();
+          $('cells').textContent = fn.getHex() + ' hex · ' + fn.getPent() + ' pent';
+          $('fps').textContent   = fn.getFps() + ' FPS';
+          $('speedval').textContent = fn.getSpeed().toFixed(2);
+          $('seedval').textContent  = fn.getSeedCount();
 
-        // Reflect state the engine may have changed itself (keyboard, toggles).
-        var paused = fn.getPaused();
-        $('btnPause').textContent = paused ? '▶ Resume' : '⏸ Pause';
-        $('status').textContent = paused ? 'Paused' : 'Running';
-        $('status').className = 'status ' + (paused ? 'paused' : 'running');
-        $('btnCamera').textContent = fn.getOrbital() ? '◉ Mouse Orbit' : '⟳ Auto-rotate';
+          // Rule explanation, straight from the live thresholds.
+          var bLo = fn.rbLo(), bHi = fn.rbHi();
+          $('ruleBorn').textContent = 'Born: ' +
+            (bLo === bHi ? ('exactly ' + bLo) : (bLo + '–' + bHi)) + ' neighbors';
+          $('ruleSurv').textContent = 'Survives: ' + fn.rsLo() + '–' + fn.rsHi() + ' neighbors';
+
+          // Reflect state the engine may have changed itself (keyboard, toggles).
+          var paused = fn.getPaused();
+          $('btnPause').textContent = paused ? '▶ Resume' : '⏸ Pause';
+          $('status').textContent = paused ? 'Paused' : 'Running';
+          $('status').className = 'status ' + (paused ? 'paused' : 'running');
+          $('btnCamera').textContent = fn.getOrbital() ? '◉ Mouse Orbit' : '⟳ Auto-rotate';
+        } catch (e) { /* transient during teardown/reload — ignore */ }
       }
 
       setInterval(poll, 150);
